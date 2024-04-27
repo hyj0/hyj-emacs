@@ -1,3 +1,12 @@
+(when nil
+  (progn
+    (package-refresh-contents)
+    (package-install 'evil)
+    (package-install 'ivy)
+    (package-install 'company)
+    ;down load https://paredit.org/releases/26/paredit.el to hyj-emacs
+    (package-install 'rainbow-mode)
+    ))
 (defun os-is-linux ()
   (if (eq system-type 'gnu/linux)
       t
@@ -25,6 +34,7 @@
 (add-hook 'after-init-hook 'global-company-mode)
 
 ;(add-to-list 'load-path "~/.emacs.d")
+(add-to-list 'load-path (my-home-dir))
 ;
 (autoload 'paredit-mode "paredit"
   "Minor mode for pseudo-structurally editing Lisp code."
@@ -51,6 +61,7 @@
 
 (defun enable-lisp-mode()
   (paredit-mode 1)
+  (require 'rainbow-mode)
   (rainbow-mode 1)
   (show-paren-mode 1))
 

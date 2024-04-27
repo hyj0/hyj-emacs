@@ -25,6 +25,7 @@
 ;(alert "This is an alert" :title "My Alert")
 
 ;(message 'completing-read-function)
+(require 'ivy)
 (ivy-mode 1)
 
 
