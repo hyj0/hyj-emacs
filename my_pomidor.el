@@ -16,17 +16,17 @@
 			  (write-work-log (list 'my-pomidor-deal-work-log status name start-time dur-sec (format-time-string "%Y-%m-%d %H:%M:%S" start-time)))
 			  (while (and nil (< (float-time (current-time)) (+ start-sec dur -5)))
 			    (sleep-for 1)
-			    (message-box (format "======================%s==================== %s \r\n====================================================================" name "工作完成，请休息！")))
-			  (message-box (format "======================%s==================== %s \r\n====================================================================" name (concat  "工作完成，请休息！" (get-eated-yao-message))))
+			    (message-box (format "======================%s==================== %s \r\n==================================" name "工作完成，请休息！")))
+			  (message-box (format "======================%s==================== %s \r\n====================================" name (concat  "工作完成，请休息！" (get-eated-yao-message))))
 			  (sleep-for 2)
-			  (message-box (format "======================%s==================== %s \r\n====================================================================" name (concat  "工作完成，请休息！" (get-eated-yao-message))))
+			  (message-box (format "======================%s==================== %s \r\n====================================" name (concat  "工作完成，请休息！" (get-eated-yao-message))))
 			  )))
 	((= 2 status) (progn
 			(setq *my-pomidor-timer* nil)
-			(message-box (format "=====================%s================= %s ===============================================================================" name (concat  "休息完成，请工作！" (get-eated-yao-message))))
+			(message-box (format "=====================%s================= %s ========" name (concat  "休息完成，请工作！" (get-eated-yao-message))))
 			(sleep-for 1)
-			(message-box (format "=====================%s================= %s ===============================================================================" name (concat  "休息完成，请工作！" (get-eated-yao-message))))
-			(let ((contine (x-popup-dialog (selected-frame)
+			(message-box (format "=====================%s================= %s ========" name (concat  "休息完成，请工作！" (get-eated-yao-message))))
+			(let ((contine (x-popup-dialog (get-x-frame)
 						       (list (concat  "休息完成，是否继续该工作？" name)
 							   ;(format "%s %s" name "休息完成，是否继续该工作？")
 							  '("Yes" . t)
@@ -220,7 +220,7 @@
 	"-->吃药1粒"
       (let  ((day-num  (string-to-number  (car  (last  (split-string day "-"))))))
 	(if (= 0 (mod day-num 2))
-	    "-->吃药一粒"
+	    "-->吃药1.5粒"
 	  "-->吃药1粒")))))
 
 (defun get-eated-yao-message0 ()
@@ -250,3 +250,31 @@
   (concat (get-eated-yao-message0)
 	  ;"-" (get-restart-mp-weixin-message) (check-firefox-monitor)
 	  ))
+
+
+(defun my-message-box-hook (org-fun fmt &rest args)
+  (let ((deal nil)
+	(ret nil))
+    (cl-dolist (fm (frame-list))
+      (when (eq 'x (framep fm))
+	(message "x %S" fm)
+	(with-selected-frame fm
+	  (setq ret (funcall org-fun fmt args)))
+	(setq deal t)
+	(cl-return)))
+    (if deal
+	ret
+      (funcall org-fun fmt args))))
+;(my-message-box-hook #'message-box "abcd")
+
+(advice-add 'message-box :around #'my-message-box-hook)
+;(advice-remove 'message-box 'my-message-box-hook)
+
+(defun get-x-frame ()
+  (let ((ret (cl-dolist (fm (frame-list))
+	       (when (eq 'x (framep fm))
+		 (message "x %S" fm)
+		 (cl-return fm)))))
+    (if ret
+	ret
+      (select-frame))))

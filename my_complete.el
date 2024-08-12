@@ -10,7 +10,7 @@
 
 (defun my-company-capf-around (org-fun command &optional arg &rest _args)
 					;(message "my-company-capf-around=%s %s %s" command arg _args)
-  (let ((ret (apply org-fun command arg _args)))
+  (let ((ret (funcall org-fun command arg _args)))
 					;(message "my-company-capf-around ret=%s" ret)
     (if (and  (eq 'prefix command) (not (eq nil  ret)) (not (eq ret 'stop))
 	      (not  (eq major-mode 'scheme-mode)) (not (eq major-mode 'c-mode)) (not (eq major-mode 'c++-mode)))
@@ -98,6 +98,10 @@
 
 (setq company-transformers '(my-company-trans))
 
+(when (not (fboundp 'string-replace))
+  (defun string-replace (what with in)
+    (replace-regexp-in-string (regexp-quote what) with in nil 'literal)))
+
 
 (defun add-star-between-str (str)
   (if (stringp str)
@@ -106,7 +110,10 @@
 	      'identity
 	      (split-string str "" t) "*")))
 	(message "ret=%s" ret)
-	(concat "*" (string-replace "**" "*" (string-replace "***" "*" ret))))
+	(if (or (= 1 (length ret))
+		(and (> (length ret) 0) (string-equal "/" (substring ret 0 1))))
+	    ret
+	  (concat "*" (string-replace "**" "*" (string-replace "***" "*" ret)))))
     str))
 
 (when (os-is-linux)

@@ -53,6 +53,8 @@
 			       (load (concat prefix "my_racket.el"))
 			       (load (concat prefix "my_complete.el"))
 			       (load (concat prefix "my_pomidor.el"))
+			       (load (concat prefix "my_kubectl.el"))
+			       (load (concat prefix "my_eaf.el"))
 			       )))
 ;(requirel 'evil)
 ;(evil-mode 1)

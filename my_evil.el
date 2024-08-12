@@ -12,3 +12,6 @@
 		  (evil-force-normal-state)
 			)))
 	    (message "add hook evil")))
+
+(define-key evil-normal-state-map (kbd "f") 'evil-ace-jump-word-mode)
+(define-key evil-normal-state-map (kbd "g [") 'forward-sexp)
