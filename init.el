@@ -25,7 +25,8 @@
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
 (if (os-is-windows)
     (setq gnutls-algorithm-priority "NORMAL:-VERS-TLS1.1")
-  (setq gnutls-algorithm-priority "NORMAL:-VERS-TLS1.2"))
+  (when nil
+    (setq gnutls-algorithm-priority "NORMAL:-VERS-TLS1.2")))
 
 
 (toggle-debug-on-error)
@@ -55,6 +56,8 @@
 			       (load (concat prefix "my_pomidor.el"))
 			       (load (concat prefix "my_kubectl.el"))
 			       (load (concat prefix "my_eaf.el"))
+			       (load (concat prefix "my_database.el"))
+			       (load (concat prefix "my_eaf_term.el"))
 			       )))
 ;(requirel 'evil)
 ;(evil-mode 1)
@@ -70,6 +73,11 @@
 (add-hook 'emacs-lisp-mode-hook #'enable-lisp-mode)
 (add-hook 'scheme-mode-hook #'enable-lisp-mode)
 (add-hook 'racket-mode-hook #'enable-lisp-mode)
+(add-hook 'python-mode-hook (lambda ()
+			      (elpy-enable)
+			      (paredit-mode 1)
+			      (require 'rainbow-mode)
+			      (rainbow-mode 1)))
 
 
 (custom-set-variables
@@ -89,4 +97,7 @@
 
 (set-background-color "#C6EECB")
 (put 'list-timers 'disabled nil)
+
+(defalias 'yes-or-no-p 'y-or-n-p)
+
 (message "init.el end")

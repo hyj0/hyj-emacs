@@ -62,7 +62,7 @@
 
 (defun my-string-len< (x y)
   "Like `string<', but operate on CARs when given cons cells."
-  ;(message x)
+  ;(message "my-string-len< x=%S y=%S" x y)
   (let ((len-x (length x))
 	(len-y (length y)))
     (if 't
@@ -91,7 +91,7 @@
 					;(ivy-read "Select a letter: " '("bb" "c" "a") :sort t)
 					;(ivy-read "Select a letter: " '("bb" "c" "a") :sort #'my-string-len<)
 
-(setq company-minimum-prefix-length 1)
+(setq company-minimum-prefix-length 6)
 
 (defun my-company-trans (lst)
   (sort lst 'my-string-len<))

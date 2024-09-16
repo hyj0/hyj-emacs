@@ -1,0 +1,23 @@
+Subject: [PATCH] eaf-exec-py-code
+---
+Index: core/buffer.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/buffer.py b/core/buffer.py
+--- a/core/buffer.py	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
++++ b/core/buffer.py	(date 1726295424153)
+@@ -152,6 +152,12 @@
+         self.enter_fullscreen_request.connect(self.enable_fullscreen)
+         self.exit_fullscreen_request.connect(self.disable_fullscreen)
+ 
++    @interactive
++    def exec_pycode (self):
++        s = get_emacs_var("*my-eaf-pycode*")
++        print("code=", s)
++        exec ( compile (s, "my_eaf_pycode.py", "exec"), globals (), locals ())
++
+     def base_class_name(self):
+         return self.__class__.__bases__[0].__name__
+ 

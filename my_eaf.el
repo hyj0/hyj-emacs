@@ -9,39 +9,26 @@
   (setq eaf-proxy-host "127.0.0.1")
   (setq eaf-proxy-port "8118"))
 
-(setq eaf-enable-debug t)
+;(setq eaf-enable-debug t)
 (setq eaf-browser-translate-language "zh")
 (setq eaf-browser-continue-where-left-off t)
 (setq eaf-browser-default-search-engine "duckduckgo")
-(setq eaf-browse-blank-page-url "https://duckduckgo.com")
+(setq eaf-browser-blank-page-url "https://duckduckgo.com")
 
-
-(require 'eaf-git)
-(require 'eaf-system-monitor)
-(require 'eaf-mindmap)
-(require 'eaf-map)
-(require 'eaf-js-video-player)
-(require 'eaf-markmap)
-(require 'eaf-org-previewer)
-(require 'eaf-demo)
-(require 'eaf-airshare)
-(require 'eaf-music-player)
-(require 'eaf-markdown-previewer)
-(require 'eaf-jupyter)
-(require 'eaf-file-browser)
-(require 'eaf-video-player)
+(require 'eaf)
 (require 'eaf-file-manager)
-(require 'eaf-pyqterminal)
-(require 'eaf-vue-tailwindcss)
-(require 'eaf-image-viewer)
 (require 'eaf-terminal)
-(require 'eaf-vue-demo)
-(require 'eaf-netease-cloud-music)
-(require 'eaf-pdf-viewer)
-(require 'eaf-camera)
-(require 'eaf-2048)
+(require 'eaf-system-monitor)
 (require 'eaf-browser)
-(require 'eaf-file-sender)
+(require 'eaf-video-player)
+(require 'eaf-file-browser)
+(require 'eaf-music-player)
+(require 'eaf-image-viewer)
+(require 'eaf-pyqterminal)
+(require 'eaf-pdf-viewer)
+(require 'eaf-git)
+(require 'eaf-demo)
+
 
 (add-hook 'eaf-mode-hook
 	  (lambda ()
@@ -54,15 +41,6 @@
 
 (require 'evil)
 (add-to-list 'evil-emacs-state-modes 'eaf-mode)
-
-(eaf-create-send-sequence-function "ctrl-v" "C-v")
-(eaf-create-send-sequence-function "ctrl-c-ctrl-c" "C-c C-c")
-
-(eaf-bind-key eaf-send-ctrl-v-sequence "C-v" eaf-browser-keybinding)
-(eaf-bind-key eaf-send-ctrl-c-ctrl-c-sequence "C-c" eaf-browser-keybinding)
-
-;(eaf-open-browser "https://duckduckgo.com")
-
 
 (add-hook 'kill-emacs-hook
           (lambda ()
@@ -90,14 +68,94 @@
 	))))
 
 ;(my-eaf-browser-reopen)
-
+(require 'url)
 (defun my-rename-buffer (org-fun name &optional un)
-  (message "rename buffer %S to %S" (buffer-name) name)
-  (when (eq major-mode 'eaf-mode)
-    (setq name (concat "eaf-" name)))
+  ;(message "rename buffer %S to %S" (buffer-name) name)
+  (when (and (eq major-mode 'eaf-mode) )
+    (setq name (concat "eaf-" name))
+    (when (string= eaf--buffer-app-name "browser")
+      (setq name (concat name "-" (url-host (url-generic-parse-url (eaf-get-path-or-url))) ":" (format "%d" (url-port (url-generic-parse-url (eaf-get-path-or-url))))))))
   (when t
     (funcall org-fun name un))
   )
 
+(concat "" (format "%d" (url-port (url-generic-parse-url "https://note.youdao.com/web/#/file/recent/note/WEBc0834d1bc3a0f1f39c8f6e1b4f5781c1/" ))))
+
 (advice-add 'rename-buffer :around #'my-rename-buffer)
 ;(advice-remove 'rename-buffer 'my-rename-buffer)
+
+
+;open url at new buffer
+(defun my-eaf-open-browser (org-fun url &optional args)
+  (if (eq 'eaf-mode major-mode)
+      (eaf-open (eaf-wrap-url url) "browser" args t)
+    (funcall org-fun url args)))
+
+(advice-add 'eaf-open-browser :around #'my-eaf-open-browser)
+;(advice-remove 'eaf-open-browser #'my-eaf-open-browser)
+
+
+(defun fuzzy-find-buffer (pattern)
+  "Fuzzy find buffer matching PATTERN."
+  (interactive "sBuffer name pattern: ")
+  (let ((buffers (buffer-list))
+        (matched-buffers '()))
+    (dolist (buffer buffers)
+      (when (string-match-p pattern (buffer-name buffer))
+        (push buffer matched-buffers)))
+    matched-buffers))
+
+
+(defun my-eaf-exec-pycode (pycode)
+  (setq *my-eaf-pycode* pycode)
+  (eaf-call-sync "eval_function" eaf--buffer-id "exec_pycode" "return"))
+
+(eaf-create-send-sequence-function "ctrl-v" "C-v")
+
+(eaf-bind-key eaf-send-ctrl-v-sequence "C-v" eaf-browser-keybinding)
+
+;(eaf-open-browser "https://duckduckgo.com")
+
+(setq eaf-browser-enable-autofill t)
+
+
+(defun my-eaf-c-c-copy (&rest args)
+  (interactive)
+  (message "C-c")
+  (my-eaf-exec-pycode "self.copy_text()")
+  )
+(eaf-bind-key my-eaf-c-c-copy "C-c" eaf-browser-keybinding)
+
+(let* ((pyfile (concat  "~/.emacs.d/hyj-emacs/eaf_browser_init.py"))
+       (pycode (with-temp-buffer
+		  (insert-file-contents pyfile)
+		  (buffer-string))))
+  (setq *eaf-browser-init-pycode* pycode))
+
+
+(eaf-bind-key my-eaf-c-c-copy "C-h" eaf-browser-keybinding)
+
+(global-set-key (kbd "<f4>") 'eaf-open-browser-with-history)
+
+(defun kill-all-eaf-buffer ()
+  (interactive)
+  (dolist (one (fuzzy-find-buffer ""))
+    (with-current-buffer one
+      (when (eq major-mode 'eaf-mode)
+	(kill-buffer one)))))
+
+(when nil
+;test
+  (with-current-buffer (car (fuzzy-find-buffer "Kube"))
+    (my-eaf-exec-pycode (with-temp-buffer
+			  (insert-file-contents "~/eaf_patch.py")
+			  (buffer-string))))
+
+  (with-current-buffer (car (fuzzy-find-buffer "Kube"))
+    (my-eaf-exec-pycode "message_to_emacs('caret_browsing_mode={}'.format(self.url))"))
+
+  (with-current-buffer (car (fuzzy-find-buffer "Kube"))
+    (my-eaf-exec-pycode *eaf-browser-init-pycode*)
+    )
+  (eaf--toggle-caret-browsing t)
+  )
