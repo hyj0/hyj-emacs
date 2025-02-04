@@ -1,9 +1,9 @@
 (require 'evil)
 
-(add-hook 'evil-mode-hook 
+(add-hook 'evil-mode-hook
 	  (lambda ()
-	    (define-key evil-insert-state-map (kbd "ESC") 
-	      (lambda () 
+	    (define-key evil-insert-state-map (kbd "ESC")
+	      (lambda ()
 		(interactive)
 		(progn
 		  (message "evil-normal-state")
@@ -33,4 +33,4 @@
       (forward-sexp arg interactive))))
 ;(define-key evil-normal-state-map (kbd "g [") 'forward-sexp)
 (define-key evil-normal-state-map (kbd "g [") 'my-forward-sexp)
-(global-set-key (kbd "M-[") 'my-forward-sexp)
+;(define-key evil-normal-state-map (kbd "M-[") 'my-forward-sexp)

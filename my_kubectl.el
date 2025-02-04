@@ -41,6 +41,9 @@
     (car (string-split  (completing-read "pod:" (string-split (string-trim  (shell-command-to-string cmd)) "\n")) " ")))
   )
 
+(defun kube-select-service ()
+  (car (string-split (completing-read "service:" (string-split  (shell-command-to-string (get-kube-cmd "get svc")) "\n")))))
+
 (defun get-deployment (&optional filter-name)
   (let ((cmd (get-deployment-cmd filter-name)))
     (message "cmd=%s" cmd)
@@ -85,7 +88,7 @@
     (comint-send-input))
   (switch-to-buffer buffer-name))
 (defun command-with-shell-eaf (command &optional buffer-name)
- (let* ((dir (eaf--non-remote-default-directory))
+  (let* ((dir (eaf--non-remote-default-directory))
 	(args (make-hash-table :test 'equal))
          (expand-dir (expand-file-name dir)))
     (puthash "command" command args)
@@ -96,6 +99,22 @@
        expand-dir)
      args)
     (eaf-open command "pyqterminal" (json-encode-hash-table args) t)))
+(defun ssh-eaf (host user passwd &optional proxy port)
+  (command-with-shell-eaf (format  "sshpass -p %s ssh  %s@%s  %s  %s -o StrictHostKeyChecking=no  -o ServerAliveInterval=60 -o ServerAliveCountMax=3 "
+				   passwd
+				   user
+				   host
+				   (if port
+				       (format "-p %d" port)
+				     "")
+				   (if proxy
+				       "-o ProxyCommand='nc -X 5 -x 127.0.0.1:1080 %h %p'"
+				     ""))))
+(defun ssh-eaf-authinfo ()
+  (interactive)
+  (let ((sp  (mapcar (lambda (one) (list (format "/%s:%s@%s:/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 100 ))))
+    (let ((info (car (my-assoc (completing-read "authinfo:" sp) sp))))
+      (ssh-eaf (plist-get info :host) (plist-get info :user) (auth-info-password info) t))))
 (defun get-pod-container (pod-name)
   (let ((containers (string-split (shell-command-to-string  (get-kube-cmd (concat "get pod " pod-name " -o jsonpath='{.spec.containers[*].name}'"))) " ")))
     (if (> (length containers) 1)
@@ -228,6 +247,16 @@
     (shell-command cmd)
     )
   )
+(defun my-rsync-to-local (host-and-path local-dir passwd)
+  (let ((cmd (format "rsync -rv -e 'sshpass -p %s ssh -o StrictHostKeyChecking=no -o ProxyCommand=\"nc -X 5 -x 127.0.0.1:1080 %%h %%p\"' %s %s"
+		     passwd
+		     host-and-path
+		     local-dir)))
+    (message "cmd=%s" cmd)
+    (shell-command cmd)
+    )
+  )
+
 
 (defun jms-parse-ssh (s)
   (let ((json (json-read-from-string  (message "%s" (base64-decode-string  (substring  (cdr (car  (json-read-from-string s))) 6))))))
@@ -300,10 +329,33 @@
 	(file-name (file-name-nondirectory file))
 	(buffer-name (completing-read "term:" (mapcar (lambda (b) (buffer-name b)) (fuzzy-find-buffer "eaf-Term")))))
     (with-current-buffer buffer-name
+      (eaf-call-sync "send_key" eaf--buffer-id "stty -echo")
+      (eaf-send-return-key)
+      (sleep-for 1)
+      (eaf-call-sync "send_key" eaf--buffer-id (format "echo %s|base64 -d > %s" content file-name))
+      ;(switch-to-buffer buffer-name )
+      (eaf-send-return-key)
+      (eaf-call-sync "send_key" eaf--buffer-id "echo transfer ok")
+      (eaf-send-return-key)
+      (eaf-call-sync "send_key" eaf--buffer-id "stty echo")
+      (eaf-send-return-key)
+      )))
+
+(defun send-file-to-eaf2 (file buffer-name)
+  (let ((content (base64-encode-string (encode-coding-string  (with-temp-buffer
+								(insert-file-contents file)
+								(buffer-string))
+							      'utf-8)
+				       t))
+	(file-name (file-name-nondirectory file))
+	;(buffer-name (completing-read "term:" (mapcar (lambda (b) (buffer-name b)) (fuzzy-find-buffer "eaf-Term"))))
+	)
+    (with-current-buffer buffer-name
       (eaf-call-sync "send_key" eaf--buffer-id (format "echo %s|base64 -d > %s" content file-name))
       ;(switch-to-buffer buffer-name )
       (eaf-send-return-key)
       )))
+
 
 (defun send-dir-to-eaf (dir)
   (interactive "Dfile:")
@@ -325,24 +377,14 @@
 	    ))))))
 
 (defun jms-into-ssh (cmd id)
-  (let ((cmd "sshpass -p RXdqyKK63Hk40DBibCZD ssh  -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=no -o ProxyCommand='nc -X 5 -x 127.0.0.1:1080 %h %p'  yujie.huang@10.5.0.12 -p 2222"))
-    (let ((msg (eaf-pyqterminal-run-command-in-dir
-		 cmd
-		 (eaf--non-remote-default-directory)
-		 t)))
-      ;(sleep-for 2)
-      (with-current-buffer (car (last (string-split msg " ")))
-	(eaf-call-sync "send_key" eaf--buffer-id "p")
-	(eaf-send-return-key)
-	(sleep-for 2)
-	(eaf-call-sync "send_key" eaf--buffer-id (format "%d\n" id))
-	(eaf-send-return-key)
-	(sleep-for 2)
-	(eaf-call-sync "send_key" eaf--buffer-id "sudo su -")
-	(eaf-send-return-key)
-	(eaf-call-sync "send_key" eaf--buffer-id "cd /data/")
-	(eaf-send-return-key)
-	))))
+  (message "cmd=%s" cmd)
+  (let ((msg (eaf-pyqterminal-run-command-in-dir
+	      cmd
+	      (eaf--non-remote-default-directory)
+	      t)))
+					;return buffer-name
+    (car (last (string-split msg " ")))))
+
 
 (defun fetch-url-content-sync (url)
   "Synchronously fetch the content of URL."

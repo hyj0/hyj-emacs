@@ -65,12 +65,15 @@
   ;(message "my-string-len< x=%S y=%S" x y)
   (let ((len-x (length x))
 	(len-y (length y)))
-    (if 't
-	(< len-x len-y)
-      (cond ((< len-x len-y) -1)
-	    ((> len-y len-x) 1)
-	    (t (string< x y))))))
+    (if (= len-x len-y)
+	(ivy-string< x y)
+      (< len-x len-y))))
 
+(when nil
+   (cond ((< len-x len-y) -1)
+	    ((> len-y len-x) 1)
+	    (t (string< x y))
+	    ))
 
 ;org
 (setq ivy-sort-functions-alist
@@ -137,3 +140,18 @@
 		 ;(cons 'c-mode (split-string "/data/projector/clion-2023.1.6/bin/clion.sh lsp-server ."))
 		 ;(cons 'c-mode '("127.0.0.1" 8989))
 		 )))
+(require 'ivy-posframe)
+(ivy-posframe-mode 1)
+
+
+(when t
+  (setq tramp-ssh-controlmaster-options "-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o ProxyCommand='nc -X 5 -x 127.0.0.1:1080 %%h %%p'")
+					;tramp complete in eshell
+  (defun my-complete-tramp-authinfo ()
+    (interactive)
+    (let ((sp  (mapcar (lambda (one) (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)))  (auth-source-search :max 1000 ))))
+      (insert  (completing-read "authinfo:" sp))))
+  (add-hook 'eshell-mode-hook
+	    (lambda ()
+	      (eshell/alias "ll" "ls -al")))
+  )

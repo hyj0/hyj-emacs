@@ -1,0 +1,83 @@
+Subject: [PATCH] eaf-main
+---
+Index: core/buffer.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/buffer.py b/core/buffer.py
+--- a/core/buffer.py	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
++++ b/core/buffer.py	(date 1735813651889)
+@@ -152,6 +152,12 @@
+         self.enter_fullscreen_request.connect(self.enable_fullscreen)
+         self.exit_fullscreen_request.connect(self.disable_fullscreen)
+ 
++    @interactive
++    def exec_pycode (self):
++        s = get_emacs_var("*my-eaf-pycode*")
++        print("code=", s)
++        exec ( compile (s, "my_eaf_pycode.py", "exec"), globals (), locals ())
++
+     def base_class_name(self):
+         return self.__class__.__bases__[0].__name__
+ 
+@@ -413,6 +419,7 @@
+     @PostGui()
+     def send_key_sequence(self, event_string):
+         ''' Fake key sequence.'''
++        print("send_key_sequence", event_string)
+         event_list = event_string.split("-")
+ 
+         if len(event_list) > 1:
+Index: eaf.el
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/eaf.el b/eaf.el
+--- a/eaf.el	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
++++ b/eaf.el	(date 1737008617584)
+@@ -1297,12 +1297,15 @@
+ (defun eaf-send-key ()
+   "Directly send key to EAF Python side."
+   (interactive)
+-  (eaf-call-async "send_key" eaf--buffer-id (key-description (this-command-keys-vector))))
++  (let ((key  (key-description (this-command-keys-vector))))
++    ;(message "eaf-send-key %S" key)
++    (eaf-call-sync "send_key" eaf--buffer-id key)))
+ 
+ (defun eaf-send-key-sequence ()
+   "Directly send key sequence to EAF Python side."
+   (interactive)
+-  (eaf-call-async "send_key_sequence" eaf--buffer-id (key-description (this-command-keys-vector))))
++  (let ((key  (key-description (this-command-keys-vector))))
++    (eaf-call-sync "send_key_sequence" eaf--buffer-id key)))
+ 
+ (defmacro eaf-create-send-key-function (key &optional value)
+   (let ((send-key-function (intern (format "eaf-send-%s-key" key))))
+Index: core/webengine.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/webengine.py b/core/webengine.py
+--- a/core/webengine.py	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
++++ b/core/webengine.py	(date 1738669515678)
+@@ -1867,6 +1867,7 @@
+             encode_path = cookie.path().encode("utf-8").hex()
+         else:
+             encode_path = cookie.path().replace("/", "|")
++            name = name.replace("/", "|")
+ 
+         return name + "+" + domain + "+" + encode_path
+ 
+@@ -1898,7 +1899,8 @@
+             with open(self.cache_file_path, "w") as f:
+                 f.write(text)
+ 
+-            result = self.get_command_result("crow -t 'zh-CN' --j -e 'google' -f {}".format(self.cache_file_path))
++            print ("cmd=", "proxychains crow -t 'zh' --j -e 'bing' -f {}".format(self.cache_file_path))
++            result = self.get_command_result("crow -t 'zh' --j -e 'bing' -f {}".format(self.cache_file_path))
+             translation = json.loads(''.join(list(map(lambda b: b.decode("utf-8"), result))))["translation"]
+ 
+             if os.path.exists(self.cache_file_path):

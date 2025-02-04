@@ -10,8 +10,18 @@ import datetime
 def db_fetch_data(self, connection, query):
     import datetime
     import decimal
+    connection.ping (reconnect=True)
+    if not connection.is_connected ():
+        raise "connect loss"
     cursor = connection.cursor()
     cursor.execute(query)
+
+    if not cursor.description:
+        # update ,
+        connection.commit ()
+        rowcount = cursor.rowcount
+        cursor.close ()
+        return ["rowcount", [{"rowcount": rowcount}]]
 
     field_names = tuple([i[0] for i in cursor.description])
     res = []
@@ -72,6 +82,10 @@ def db_query (self):
     f.flush ()
     f.close ()
     print("sql query ok! count=%d" % (len(result),))
+if False:
+    conn = mysql.connector.connect ()
+    conn.is_connected ()
+    conn.ping (reconnect=True)
 
 if True:
     self.db_fetch_data = types.MethodType (db_fetch_data,  self)

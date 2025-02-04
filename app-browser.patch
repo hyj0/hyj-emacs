@@ -1,0 +1,39 @@
+Subject: [PATCH] app-browser
+---
+Index: buffer.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/buffer.py b/buffer.py
+--- a/buffer.py	(revision 9761f7bd22aa69f144a0a032643b0834dde6cb60)
++++ b/buffer.py	(date 1738670318817)
+@@ -149,7 +149,10 @@
+         if self.auto_import_chrome_cookies:
+             # import cookies from Chrome automatically
+             self.import_chrome_cookies(url)
+-
++        code = get_emacs_var("*eaf-browser-init-pycode*")
++        if code:
++            # message_to_emacs("eaf-browser-init-pycode={}".format(code))
++            exec(compile(code, "eaf_browser_init_pycode.py", "exec"), globals (), locals ())
+     def import_chrome_cookies(self, url):
+         from urllib.parse import urlparse
+         from pycookiecheat import chrome_cookies # package that fetches cookies
+Index: eaf-browser.el
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/eaf-browser.el b/eaf-browser.el
+--- a/eaf-browser.el	(revision 9761f7bd22aa69f144a0a032643b0834dde6cb60)
++++ b/eaf-browser.el	(date 1736823028325)
+@@ -669,7 +669,7 @@
+   "Toggle caret browsing given CARET-STATUS."
+   (if caret-status
+       (eaf--gen-keybinding-map eaf-browser-caret-mode-keybinding t)
+-    (eaf--gen-keybinding-map eaf-browser-keybinding))
++    (eaf--gen-keybinding-map (my-eaf-fix-key eaf-browser-keybinding)))
+   (setq eaf--buffer-map-alist (list (cons t eaf-mode-map))))
+ 
+ (defun eaf-import-chrome-bookmarks ()

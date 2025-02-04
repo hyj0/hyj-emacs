@@ -20,9 +20,9 @@
 
 (defun my-eaf-term-sendfile-to-remote ()
   (interactive)
+  (my-eaf-term-transfer-select-file)
   (with-current-buffer (my-eaf-term-select-buffer)
     (my-eaf-term-transfer-load)
-    (my-eaf-term-transfer-select-file)
     (eaf-call-sync "send_key" eaf--buffer-id "trz -b\n")))
 
 (when nil
