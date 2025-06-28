@@ -38,7 +38,7 @@
 		       "")
 		     )))
     (message "cmd=%s" cmd)
-    (car (string-split  (completing-read "pod:" (string-split (string-trim  (shell-command-to-string cmd)) "\n")) " ")))
+    (car (string-split  (my-ivy-read "pod:" (string-split (string-trim  (shell-command-to-string cmd)) "\n")) " ")))
   )
 
 (defun kube-select-service ()
@@ -99,8 +99,9 @@
        expand-dir)
      args)
     (eaf-open command "pyqterminal" (json-encode-hash-table args) t)))
-(defun ssh-eaf (host user passwd &optional proxy port)
-  (command-with-shell-eaf (format  "sshpass -p %s ssh  %s@%s  %s  %s -o StrictHostKeyChecking=no  -o ServerAliveInterval=60 -o ServerAliveCountMax=3 "
+
+(defun ssh-eaf (host user passwd &optional proxy port ext-opt)
+  (command-with-shell-eaf (format  "sshpass -p %s ssh  %s@%s  %s  %s -o StrictHostKeyChecking=no  -o ServerAliveInterval=60 -o ServerAliveCountMax=3  %s "
 				   passwd
 				   user
 				   host
@@ -109,7 +110,11 @@
 				     "")
 				   (if proxy
 				       "-o ProxyCommand='nc -X 5 -x 127.0.0.1:1080 %h %p'"
+				     "")
+				   (if ext-opt
+				       ext-opt
 				     ""))))
+
 (defun ssh-eaf-authinfo ()
   (interactive)
   (let ((sp  (mapcar (lambda (one) (list (format "/%s:%s@%s:/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 100 ))))
@@ -319,6 +324,12 @@
       (eaf-call-sync "send_key" eaf--buffer-id (format "echo %s|base64 -d > %s" content file-name))
       ;(switch-to-buffer buffer-name )
       )))
+
+(defun my-send-file-to-eaf ()
+  (interactive)
+  (let ((file (read-file-name "select file:")))
+    (send-file-to-eaf file)))
+
 (defun send-file-to-eaf (file)
   (interactive "Ffile:")
   (let ((content (base64-encode-string (encode-coding-string  (with-temp-buffer

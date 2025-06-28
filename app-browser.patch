@@ -27,8 +27,88 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
 ===================================================================
 diff --git a/eaf-browser.el b/eaf-browser.el
 --- a/eaf-browser.el	(revision 9761f7bd22aa69f144a0a032643b0834dde6cb60)
-+++ b/eaf-browser.el	(date 1736823028325)
-@@ -669,7 +669,7 @@
++++ b/eaf-browser.el	(date 1744712070899)
+@@ -526,6 +526,8 @@
+     (switch-to-buffer save-buffer))
+   (setq eaf--monitor-configuration-p t))
+ 
++(defvar *eaf-history-candidate* nil)
++
+ ;;;###autoload
+ (defun eaf-open-browser-with-history ()
+   "A wrapper around `eaf-open-browser' that provides browser history candidates.
+@@ -541,17 +543,53 @@
+                   "log.txt"))
+          (history-pattern "^\\(.+\\)??\\(.+\\)??\\(.+\\)$")
+          (history-file-exists (file-exists-p browser-history-file-path))
+-         (history (completing-read
+-                   "[EAF/browser] Search || URL || History: "
+-                   (if history-file-exists
+-                       (mapcar
+-                        (lambda (h) (when (string-match history-pattern h)
+-                                  (format "[%s] ?? %s" (match-string 1 h) (match-string 2 h))))
+-                        (with-temp-buffer (insert-file-contents browser-history-file-path)
+-                                          (split-string (buffer-string) "\n" t)))
+-                     nil)))
++	 (history-candidates (if history-file-exists
++			  (mapcar
++                           (lambda (h) (when (string-match history-pattern h)
++					 (format "[%s] ?? %s" (match-string 1 h) (match-string 2 h))))
++                           (with-temp-buffer (insert-file-contents browser-history-file-path)
++					     (split-string (buffer-string) "\n" t)))
++			nil))
++         (history (ivy-read
++                   "[EAF/browser] Search || URL || History: "
++		   (lambda (str)
++		     (let ((candidates history-candidates)
++			   (start-time (float-time (current-time))))
++		       (or
++			(when (< (length str) 1)
++			  candidates)
++			(if nil
++			    (append
++			     (seq-filter (lambda (s)
++					   (if (> (- (float-time (current-time)) start-time) 0.6)
++					       nil
++					     (string-match-p (regexp-quote str) s)))
++					 candidates)
++			     (sort (seq-filter (lambda (s)
++						 (if  (> (- (float-time (current-time)) start-time) 0.6)
++						     nil
++						   (string-match-p (add-star-between-str2 (regexp-quote str)) s)))
++					       candidates)
++				   #'my-string-len<))
++			  (progn
++			    (mapcar
++			     (lambda (one)
++			       (nth 1 one))
++			     (sort
++			      (cl-remove-if 'null (mapcar (lambda (s)
++							    (let ((ret (my-string-match (add-star-between-str2 str) s)))
++							      (if ret
++								  (list (cdr ret) s)
++								nil)))
++							  history-candidates))
++			      (lambda (a b)
++				(< (car a) (car b)))))
++			    )))))
++		   :dynamic-collection t))
+          (history-url (eaf-is-valid-web-url (when (string-match "??\s\\(.+\\)$" history)
+                                               (match-string 1 history)))))
++    ;(message "%S" history-candidates)
++    (setq *eaf-history-candidate* history-candidates)
+     (cond (history-url (eaf-open-browser history-url))
+           ((eaf-is-valid-web-url history) (eaf-open-browser history))
+           (t (eaf-search-it history)))))
+@@ -573,6 +611,7 @@
+          (search-url (format link search-string)))
+     search-url))
+ 
++
+ ;;;###autoload
+ (defun eaf-search-it (&optional search-string search-engine)
+   "Use SEARCH-ENGINE search SEARCH-STRING.
+@@ -669,7 +708,7 @@
    "Toggle caret browsing given CARET-STATUS."
    (if caret-status
        (eaf--gen-keybinding-map eaf-browser-caret-mode-keybinding t)

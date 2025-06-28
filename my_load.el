@@ -57,3 +57,26 @@
 (add-to-list 'load-path (expand-file-name (concat (my-home-dir) "aweshell")))
 (require 'aweshell)
 (add-hook 'eshell-mode-hook (lambda () (company-mode -1)))
+
+
+
+(defun copy-windows-file-to-dingtalk ()
+  (interactive)
+  (let* ((file-to-copy
+	  (string-trim
+	   (let ((default-directory "/"))
+	     (shell-command-to-string (format "wslpath -u %s" (current-kill 0))))))
+	 ;(remote-file (concat "/ssh:root@10.9.2.141:" "~/dingtalk_down/" (file-name-nondirectory file-to-copy)))
+	 (remote-file (concat "/ssh:projector@10.9.2.141:" "~/Downloads/" (file-name-nondirectory file-to-copy))))
+    (copy-file file-to-copy remote-file t)))
+
+
+
+(defun copy-windows-file-to-dingtalk ()
+  (interactive)
+  (let* ((file-to-copy
+	  (string-trim
+	   (let ((default-directory "/"))
+	     (shell-command-to-string (format "wslpath -u '%s'" (current-kill 0))))))
+	 (remote-file (concat "/ssh:projector@10.9.2.141:" "~/Downloads/" (file-name-nondirectory file-to-copy))))
+    (copy-file file-to-copy remote-file t)))

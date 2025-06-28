@@ -1,60 +1,5 @@
 Subject: [PATCH] eaf-main
 ---
-Index: core/buffer.py
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
-diff --git a/core/buffer.py b/core/buffer.py
---- a/core/buffer.py	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
-+++ b/core/buffer.py	(date 1735813651889)
-@@ -152,6 +152,12 @@
-         self.enter_fullscreen_request.connect(self.enable_fullscreen)
-         self.exit_fullscreen_request.connect(self.disable_fullscreen)
- 
-+    @interactive
-+    def exec_pycode (self):
-+        s = get_emacs_var("*my-eaf-pycode*")
-+        print("code=", s)
-+        exec ( compile (s, "my_eaf_pycode.py", "exec"), globals (), locals ())
-+
-     def base_class_name(self):
-         return self.__class__.__bases__[0].__name__
- 
-@@ -413,6 +419,7 @@
-     @PostGui()
-     def send_key_sequence(self, event_string):
-         ''' Fake key sequence.'''
-+        print("send_key_sequence", event_string)
-         event_list = event_string.split("-")
- 
-         if len(event_list) > 1:
-Index: eaf.el
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
-diff --git a/eaf.el b/eaf.el
---- a/eaf.el	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
-+++ b/eaf.el	(date 1737008617584)
-@@ -1297,12 +1297,15 @@
- (defun eaf-send-key ()
-   "Directly send key to EAF Python side."
-   (interactive)
--  (eaf-call-async "send_key" eaf--buffer-id (key-description (this-command-keys-vector))))
-+  (let ((key  (key-description (this-command-keys-vector))))
-+    ;(message "eaf-send-key %S" key)
-+    (eaf-call-sync "send_key" eaf--buffer-id key)))
- 
- (defun eaf-send-key-sequence ()
-   "Directly send key sequence to EAF Python side."
-   (interactive)
--  (eaf-call-async "send_key_sequence" eaf--buffer-id (key-description (this-command-keys-vector))))
-+  (let ((key  (key-description (this-command-keys-vector))))
-+    (eaf-call-sync "send_key_sequence" eaf--buffer-id key)))
- 
- (defmacro eaf-create-send-key-function (key &optional value)
-   (let ((send-key-function (intern (format "eaf-send-%s-key" key))))
 Index: core/webengine.py
 IDEA additional info:
 Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
@@ -81,3 +26,116 @@ diff --git a/core/webengine.py b/core/webengine.py
              translation = json.loads(''.join(list(map(lambda b: b.decode("utf-8"), result))))["translation"]
  
              if os.path.exists(self.cache_file_path):
+Index: core/eaf-epc.el
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/eaf-epc.el b/core/eaf-epc.el
+--- a/core/eaf-epc.el	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
++++ b/core/eaf-epc.el	(date 1750043431062)
+@@ -744,16 +744,21 @@
+        (name (format "EAF EPC Server %s" (eaf-epc-uid)))
+        (buf (eaf-epc-make-procbuf (format " *%s*" name)))
+        (main-process
+-        (make-network-process
+-         :name name
+-         :buffer buf
+-         :family 'ipv4
+-         :server t
+-         :host "127.0.0.1"
+-         :service (or port t)
+-         :sentinel
+-         (lambda (process message)
+-           (eaf-epc-server-sentinel process message connect-function)))))
++	(cl-dotimes (i 3)
++	  (condition-case err
++	      (let ((result
++		     (make-network-process
++		      :name name
++		      :buffer buf
++		      :family 'ipv4
++		      :server t
++		      :host "127.0.0.1"
++		      :service (or port t)
++		      :sentinel
++		      (lambda (process message)
++			(eaf-epc-server-sentinel process message connect-function)))))
++		(cl-return result))
++	    (error (message "make-network-process err %S" (error-message-string err)))))))
+     (push (cons main-process
+                 (make-eaf-epc-server
+                  :name name :process main-process
+Index: eaf.el
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/eaf.el b/eaf.el
+--- a/eaf.el	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
++++ b/eaf.el	(date 1737008617584)
+@@ -1297,12 +1297,15 @@
+ (defun eaf-send-key ()
+   "Directly send key to EAF Python side."
+   (interactive)
+-  (eaf-call-async "send_key" eaf--buffer-id (key-description (this-command-keys-vector))))
++  (let ((key  (key-description (this-command-keys-vector))))
++    ;(message "eaf-send-key %S" key)
++    (eaf-call-sync "send_key" eaf--buffer-id key)))
+ 
+ (defun eaf-send-key-sequence ()
+   "Directly send key sequence to EAF Python side."
+   (interactive)
+-  (eaf-call-async "send_key_sequence" eaf--buffer-id (key-description (this-command-keys-vector))))
++  (let ((key  (key-description (this-command-keys-vector))))
++    (eaf-call-sync "send_key_sequence" eaf--buffer-id key)))
+ 
+ (defmacro eaf-create-send-key-function (key &optional value)
+   (let ((send-key-function (intern (format "eaf-send-%s-key" key))))
+Index: core/buffer.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/buffer.py b/core/buffer.py
+--- a/core/buffer.py	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
++++ b/core/buffer.py	(date 1742456636654)
+@@ -152,6 +152,13 @@
+         self.enter_fullscreen_request.connect(self.enable_fullscreen)
+         self.exit_fullscreen_request.connect(self.disable_fullscreen)
+ 
++    @interactive
++    def exec_pycode (self):
++        s = get_emacs_var("*my-eaf-pycode*")
++        print("code=", s)
++        exec ( compile (s, "my_eaf_pycode.py", "exec"), globals (), locals ())
++        ''' return result'''
++
+     def base_class_name(self):
+         return self.__class__.__bases__[0].__name__
+ 
+@@ -413,6 +420,7 @@
+     @PostGui()
+     def send_key_sequence(self, event_string):
+         ''' Fake key sequence.'''
++        print("send_key_sequence", event_string)
+         event_list = event_string.split("-")
+ 
+         if len(event_list) > 1:
+Index: .gitignore
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.gitignore b/.gitignore
+--- a/.gitignore	(revision e16075c602d535b4d6fe1d59e7e05ecd468272da)
++++ b/.gitignore	(date 1726054813407)
+@@ -1,8 +1,6 @@
+ *.elc
+ *.pyc
+ /.log/
+-app/
+-app/*
+ node_modules/
+ dist/
+ tags

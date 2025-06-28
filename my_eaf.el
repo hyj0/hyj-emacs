@@ -1,5 +1,5 @@
 
-(setenv "LIBGL_ALWAYS_SOFTWARE" "1")
+;(setenv "LIBGL_ALWAYS_SOFTWARE" "1")
 
 (add-to-list 'load-path "~/.emacs.d/site-lisp/emacs-application-framework/")
 (require 'eaf)
@@ -144,6 +144,75 @@
 ;(advice-remove 'eaf-open-browser #'my-eaf-open-browser)
 
 
+(defun eaf-open-browser-with-history ()
+  "A wrapper around `eaf-open-browser' that provides browser history candidates.
+
+If URL is an invalid URL, it will use `eaf-browser-default-search-engine' to search URL as string literal.
+
+This function works best if paired with a fuzzy search package."
+  (interactive)
+  (let* ((browser-history-file-path
+          (concat eaf-config-location
+                  (file-name-as-directory "browser")
+                  (file-name-as-directory "history")
+                  "log.txt"))
+         (history-pattern "^\\(.+\\)??\\(.+\\)??\\(.+\\)$")
+         (history-file-exists (file-exists-p browser-history-file-path))
+	 (history-candidates (if history-file-exists
+			  (mapcar
+                           (lambda (h) (when (string-match history-pattern h)
+					 (format "[%s] ?? %s" (match-string 1 h) (match-string 2 h))))
+                           (with-temp-buffer (insert-file-contents browser-history-file-path)
+					     (split-string (buffer-string) "\n" t)))
+			nil))
+         (history (ivy-read
+                   "[EAF/browser] Search || URL || History: "
+		   (lambda (str)
+		     (let ((candidates history-candidates)
+			   (start-time (float-time (current-time))))
+		       (or
+			(when (< (length str) 1)
+			  candidates)
+			(if nil
+			    (append
+			     (seq-filter (lambda (s)
+					   (if (> (- (float-time (current-time)) start-time) 0.6)
+					       nil
+					     (string-match-p (regexp-quote str) s)))
+					 candidates)
+			     (sort (seq-filter (lambda (s)
+						 (if  (> (- (float-time (current-time)) start-time) 0.6)
+						     nil
+						   (string-match-p (add-star-between-str2 (regexp-quote str)) s)))
+					       candidates)
+				   #'my-string-len<))
+			  (progn
+			    (mapcar
+			     (lambda (one)
+			       (nth 1 one))
+			     (sort
+			      (cl-remove-if 'null (mapcar (lambda (s)
+							    (if (> (- (float-time (current-time)) start-time) 0.2)
+								nil
+							      (let ((ret (my-string-match (add-star-between-str2 str) s)))
+								(if ret
+								    (list (cdr ret) s)
+								  nil))))
+							  history-candidates))
+			      (lambda (a b)
+				(< (car a) (car b)))))
+			    )))))
+		   :dynamic-collection t))
+         (history-url (eaf-is-valid-web-url (when (string-match "??\s\\(.+\\)$" history)
+                                              (match-string 1 history)))))
+    ;(message "%S" history-candidates)
+    (setq *eaf-history-candidate* history-candidates)
+    (cond (history-url (eaf-open-browser history-url))
+          ((eaf-is-valid-web-url history) (eaf-open-browser history))
+          (t (eaf-search-it history)))))
+
+
+
 (defun fuzzy-find-buffer (pattern)
   "Fuzzy find buffer matching PATTERN."
   (interactive "sBuffer name pattern: ")
@@ -179,6 +248,9 @@
 
 (eaf-bind-key eaf-send-key-sequence "M-<left>" eaf-browser-keybinding)
 (eaf-bind-key eaf-send-key-sequence "M-<right>" eaf-browser-keybinding)
+
+(eaf-bind-key eaf-send-key-sequence "M-RET" eaf-browser-keybinding)
+(eaf-bind-key eaf-send-key-sequence "C-/" eaf-browser-keybinding)
 
 ;(eaf-create-send-sequence-function "meta-ret" "M-RET")
 ;(eaf-bind-key eaf-send-meta-ret-sequence "M-RET" eaf-browser-keybinding)
@@ -253,7 +325,7 @@
      ((symbolp key)
       (let ((c (substring (symbol-name key) 0 1)))
 	(cond
-	 ((string-match-p "a" "0123456789")
+	 ((string-match-p c "0123456789")
 	  (setq *input-method-string* ""))
 	 (t
 	  (when (not *input-method-key-down*)
@@ -305,7 +377,7 @@
 		  (buffer-string))))
   (setq *eaf-browser-init-pycode* pycode))
 
-(global-set-key (kbd "<f3>") 'eaf-open-browser-with-history)
+;(global-set-key (kbd "<f3>") 'eaf-open-browser-with-history)
 
 (defun kill-all-eaf-buffer ()
   (interactive)
@@ -319,7 +391,17 @@
   (my-eaf-exec-pycode "self.my_autofill()"))
 
 (defun select-some (lst)
-  (completing-read "select:" lst))
+  (condition-case err
+      (completing-read "select:" lst)
+    (error
+     (progn
+       (message "select-some err:%S" (error-message-string err))
+       nil))
+    (quit
+     (progn
+       (message "user cancel!")
+       nil)
+     )))
 
 
 (defun my-send-string-to-eaf (str buffer-name)
@@ -352,24 +434,239 @@
 (defun eaf-translate-text-short (text)
   (popweb-dict-bing-input text))
 
+(defvar *eaf-translate-crow-process* nil)
+
 (defun eaf-translate-text-long (text)
+  "crow conf at ~/.config/crow-translate/crow-translate.conf use https://codeberg.org/aryak/mozhi#instances"
   (with-temp-buffer
-    ;(insert "<meta name='google' content='notranslate'/>")
+					;(insert "<meta name='google' content='notranslate'/>")
     (insert text)
     (write-region (point-min) (point-max) "/tmp/eaf-translate.txt" nil 'no-message))
-  (let ((res (shell-command-to-string "proxychains crow -t 'zh' --j -e 'bing' -f /tmp/eaf-translate.txt 2>/dev/null ")))
+  (let ((res "")
+	(cur-pos 0))
+    (when (= 0 (length res))
+					;(message-box "run here")
+      (when (get-buffer "crow")
+	(with-current-buffer "crow"
+	  (erase-buffer)))
+      (let ((cmd  "proxychains crow -t 'zh' --j -e 'bing' -f /tmp/eaf-translate.txt 2>/tmp/crow.err "))
+	(when (and (processp *eaf-translate-crow-process*)
+		 (string= "run" (process-status *eaf-translate-crow-process*)))
+	    (kill-process *eaf-translate-crow-process*))
+	;(message cmd)
+	(setq *eaf-translate-crow-process* (start-process-shell-command "crow" "crow" cmd)))
+      (let ((brk nil))
+	(while (not brk)
+	  (with-current-buffer "crow"
+	    (let ((str (buffer-string)))
+	      (if (string-match-p "}" str)
+		  (progn
+		    (setq res (substring str 0 (+ 1  (string-match-p "}" str))))
+		    (setq brk t))
+		(sleep-for 0 200)))))
+	res)
+      )
     (let ((transed (my-assoc 'translated-text (json-read-from-string res))))
       (with-temp-buffer
 	(insert transed)
 	(kill-ring-save (point-min) (point-max))
 	)
-      (tooltip-show (format "%s" transed))
+					;(message-box (format "%s" transed))
+      (tooltip-show (format "%s" (my-string-multi-line transed 70)))
       transed)))
 
+(defun my-string-multi-line (str size)
+  (let ((res "")
+	(brk nil))
+    (while str
+      (setq res (concat res (substring str 0 (min size (length str))) "\n"))
+      (if (> (length str) size)
+	  (setq str (substring str size))
+	(setq str nil)))
+    res))
+
 (defun eaf-translate-text (text)
-  (if (length> text 20)
+  (if (or t (length> text 20))
       (eaf-translate-text-long text)
     (eaf-translate-text-short text)))
+
+
+(setq eaf-pyqterminal-color-schema
+  ;; Tango Dark
+  '(("blue" "#3465a4")
+    ("brown" "#fce94f")
+    ("cyan" "#06989a")
+    ("cursor" "#666666")
+    ("green" "#4e9a06")
+    ("magenta" "#75507b")
+    ("red" "#cc0000")
+    ("yellow" "#c4a000")
+    ("brightblack" "#555753")
+    ("brightblue" "#729fcf")
+    ("brightbrown" "#c4a000")
+    ("brightcyan" "#34e2e2")
+    ("brightgreen" "#8ae234")
+    ("brightmagenta" "#ad7fa8")
+    ("brightred" "#ef2929")
+    ("brightwhite" "#729fcf")
+    ("brightyellow" "#c4a000")))
+
+
+(defun my-eaf-kasm-input ()
+  (interactive)
+  (let ((str (read-string "input:")))
+    (kill-new str)
+    ))
+
+
+(defvar *my-cur-edit-clipboard-buffer* nil)
+
+;(eaf-open-browser "file:///home/hyj/.emacs.d/hyj-emacs/xe-clipboard-index.html")
+
+(defun my-eaf-open-clipboard-url ()
+  (when (not (fuzzy-find-buffer "eaf-??è´´æ?¿æ?è¯?é¡µé??"))
+    (let ((cur-buffer (current-buffer))
+	  (cur-window (get-buffer-window (current-buffer))))
+      (eaf-open-browser "file:///home/hyj/.emacs.d/hyj-emacs/xe-clipboard-index.html")
+      (while (not (fuzzy-find-buffer "eaf-??è´´æ?¿æ?è¯?é¡µé??"))
+	(sleep-for 0.2))
+      (with-current-buffer  (car (fuzzy-find-buffer "eaf-??è´´æ?¿æ?è¯?é¡µé??"))
+	(switch-to-buffer cur-buffer)))))
+
+
+(defun edit-clipboard ()
+  (interactive)
+  (setq *my-cur-edit-clipboard-buffer* (current-buffer))
+  (let ((clipboard-content (current-kill 0)))
+    (message "clipboard-content=%S" clipboard-content)
+    (let ((buffer (get-buffer-create "*clipboard*")))
+      (with-current-buffer buffer
+        (erase-buffer)
+        (insert clipboard-content)
+        (set-buffer-modified-p nil)
+	(evil-insert-state)
+	(when (not current-input-method)
+	  (toggle-input-method))
+	)
+      (display-buffer buffer '(display-buffer-below-selected
+                               (allow-no-window . nil) ; Ensure a window is created
+                               (inhibit-same-window . t) ; Prevent using the same window
+                               (window-height . 5))) ; Adjust height as needed
+      (select-window (get-buffer-window buffer))
+      (message "Edit clipboard content and press C-c C-c to save.")
+      (local-set-key (kbd "C-c C-c") 'save-clipboard)
+      )))
+
+(defun save-clipboard ()
+  (interactive)
+  (let ((content (buffer-string)))
+    (gui-set-selection 'CLIPBOARD content)
+    (kill-new content)
+    (set-buffer-modified-p nil)
+    (let ((buffer (get-buffer "*clipboard*")))
+      (when buffer
+	(delete-window (get-buffer-window buffer))
+        (kill-buffer buffer)
+	(sync-clipboard-eaf))))
+  (message "Clipboard updated!"))
+
+(defun sync-clipboard-eaf ()
+  (my-eaf-open-clipboard-url)
+  (with-current-buffer (car (fuzzy-find-buffer "eaf-??è´´æ?¿æ?è¯?é¡µé??"))
+    (my-eaf-exec-pycode "
+f = open (\"/tmp/loop-paste-file.txt\")
+content = f.read ()
+f.close ()
+content = repr (content)
+self.set_clipboard_text(content)
+content = f\"document.evaluate('/html/body/div/textarea', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.value = {content}\"
+print (content)
+print (self.buffer_widget.execute_js (content))
+click = \"document.evaluate('/html/body/div/button[3]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.click()\"
+print(click)
+self.buffer_widget.execute_js (click)")))
+
+
+
+(defun my-eaf-load-novnc-paste-js ()
+  (my-eaf-exec-pycode "
+import os
+if not hasattr(self, 'novnc_paste_js'):
+    f = open (os.path.expanduser('~') + '/' + '.emacs.d/hyj-emacs/eaf_novnc_paste.js')
+    js = f.read ()
+    f.close ()
+    self.buffer_widget.execute_js (js)
+    self.novnc_paste_js = 1
+else:
+    print('novnc_paste_js has load!')
+")
+  (sleep-for 0.2))
+
+(defvar *my-eaf-browser-novnc-list* nil)
+
+(defvar *my-eaf-browser-novnc-input* "")
+
+(defun my-eaf-send-key ()
+  "Directly send key to EAF Python side."
+  (interactive)
+  (let ((key  (key-description (this-command-keys-vector))))
+					;(message "eaf-send-key %S" key)
+    (if (and (or  (string-match-p "eaf-noVNC" (buffer-name (current-buffer)))
+		  (string-match-p "KasmVNC" (buffer-name (current-buffer))))
+	     (chinese-string-p key)
+	     (or
+	      (member eaf--buffer-id *my-eaf-browser-novnc-list*)
+	      (= 1
+		 (progn
+		   (setq *my-eaf-pycode-result* 0)
+		   (my-eaf-exec-pycode "ret = self.buffer_widget.execute_js('document.querySelector(\"canvas\");')
+ret = 1 if ret is not None else 0
+print(ret)
+set_emacs_var('*my-eaf-pycode-result*', ret)")
+		   (sleep-for 0.05)
+		   *my-eaf-pycode-result*))))
+	(progn
+	  (when (not (member eaf--buffer-id *my-eaf-browser-novnc-list*))
+	    (my-eaf-load-novnc-paste-js)
+	    (add-to-list  '*my-eaf-browser-novnc-list*  eaf--buffer-id))
+	  (setq *my-eaf-browser-novnc-input* (concat *my-eaf-browser-novnc-input* key))
+	  (run-with-idle-timer
+	   0.2
+	   nil
+	   (lambda ()
+	     (when (> (length *my-eaf-browser-novnc-input*) 0)
+	       (message "at %S %s" (current-buffer) *my-eaf-browser-novnc-input*)
+	       (let ((input *my-eaf-browser-novnc-input*))
+		 (setq *my-eaf-browser-novnc-input* "")
+		 (my-eaf-exec-pycode
+		  (format "
+content = '%s'
+content = f\"sendString ('{content}')\"
+self.buffer_widget.execute_js (content)
+" input))
+					;(sleep-for 0.01)
+		 ))))
+	  (eaf-call-sync "send_key" eaf--buffer-id key))
+      (eaf-call-sync "send_key" eaf--buffer-id key))))
+
+
+(defun chinese-string-p (str)
+  (and (stringp str)
+       (> (length str) 0)
+       (string-match-p "\\`[^\x00-\xff]+\\'" str)))
+
+(defun eaf-send-key ()
+  "Directly send key to EAF Python side."
+  (interactive)
+  (let ((key  (key-description (this-command-keys-vector))))
+    ;(message "eaf-send-key %S" key)
+    (eaf-call-sync "send_key" eaf--buffer-id key)))
+
+
+(defun eaf-send-key ()
+  "Directly send key to EAF Python side."
+  (interactive)
+  (my-eaf-send-key))
 
 
 (when nil
@@ -455,4 +752,35 @@
       (my-eaf-exec-pycode "self.my_send_key_release('<escape>')"))
     )
 
+  )
+
+(when nil
+  (defun my-eaf--build-process-environment-disable-security (orig-func &rest args)
+    "Wrap ORIG-FUNC to add QTWEBENGINE_CHROMIUM_FLAGS to the process environment."
+    (let ((environments (apply orig-func args)))
+      (when (eq system-type 'gnu/linux)
+	(add-to-list 'environments "QTWEBENGINE_CHROMIUM_FLAGS=--disable-web-security" t))
+      environments))
+
+  (defun eaf-open-browser-nosafe (url &optional args)
+    "Open EAF browser with security disabled for URL with optional ARGS.
+This is intended as a quick fix, e.g., for Google login."
+    (interactive "M[EAF/browser] URL: ")
+    (advice-add 'eaf--build-process-environment :around #'my-eaf--build-process-environment-disable-security)
+    (eaf-open (eaf-wrap-url url) "browser" args)
+    (advice-remove 'eaf--build-process-environment #'my-eaf--build-process-environment-disable-security))
+
+(eaf-open-browser-nosafe "https://aistudio.google.com/prompts/new_chat")
+)
+
+
+(when nil
+  (progn
+    (add-to-list 'load-path "~/.emacs.d/hyj-emacs/holo-layer")
+    (require 'holo-layer)
+    (setq holo-layer-enable-debug t)
+    (setq holo-layer-enable-cursor-animation t)
+    (holo-layer-enable)
+
+    )
   )

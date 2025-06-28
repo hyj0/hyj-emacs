@@ -30,6 +30,7 @@
 
 
 (toggle-debug-on-error)
+;(toggle-debug-on-quit)
 
 
 (add-hook 'after-init-hook 'global-company-mode)
@@ -53,10 +54,11 @@
 	      (interactive)
 	      (if (use-region-p)  ;; 检查是否有选中区域
 		  (let ((selected-text (buffer-substring (region-beginning) (region-end))))  ;; 获取选中的文本
-					;(message "选中的文本是: %s" selected-text)
-		    (eaf-translate-text selected-text))  ;; 显示选中的文本
+		    ;(message "选中的文本是: %s" selected-text)
+		    (eaf-translate-text-long selected-text))  ;; 显示选中的文本
 		(message "没有选中文本！")))
 	    ))
+(add-to-list 'load-path (concat (my-home-dir) "company-mode/"))
 
 (add-hook 'after-init-hook (lambda ()
 			     (let ((prefix (my-home-dir)))
@@ -73,6 +75,7 @@
 			       (load (concat prefix "my_eaf.el"))
 			       (load (concat prefix "my_database.el"))
 			       (load (concat prefix "my_eaf_term.el"))
+			       (load (concat prefix "my_gpt.el"))
 			       )))
 ;(requirel 'evil)
 ;(evil-mode 1)
@@ -89,6 +92,8 @@
 (add-hook 'scheme-mode-hook #'enable-lisp-mode)
 (add-hook 'racket-mode-hook #'enable-lisp-mode)
 (add-hook 'python-mode-hook (lambda ()
+			      (company-fuzzy-mode 0)
+			      ;(setq python-flymake-command '("pyflakes"))
 			      (elpy-enable)
 			      (paredit-mode 1)
 			      (require 'rainbow-mode)
@@ -160,6 +165,9 @@
         compilation-mode))
 
 
+;(("name" winconf) ...)
+(defvar *my-win-conf-list* nil)
+
 (defvar *my-win-conf* nil)
 (defvar *cur-win-conf* nil)
 (defvar *old-win-conf* nil)
@@ -167,12 +175,43 @@
 
 (defun my-window-record ()
   (interactive)
-  (setq *my-win-conf* (current-window-configuration)))
+  (setq *my-win-conf* (current-window-configuration))
+
+  (add-to-list '*my-win-conf-list*
+	       (list
+		(completing-read "window-name:" (mapcar (lambda (c)
+							  (car c))
+							*my-win-conf-list*))
+		(current-window-configuration))))
 
 (defun my-window-play ()
   (interactive)
-  (when *my-win-conf*
-    (set-window-configuration *my-win-conf*)))
+  ;(when *my-win-conf* (set-window-configuration *my-win-conf*))
+  (set-window-configuration
+   (car
+    (my-assoc
+     (completing-read "window-name:"
+		      (mapcar (lambda (c)
+				(car c))
+			      *my-win-conf-list*))
+     *my-win-conf-list*))))
+
+(defun my-window-delete ()
+  (interactive)
+  (setq
+   *my-win-conf-list*
+   (delq
+    nil
+    (let ((name
+	   (completing-read "window-name:"
+			    (mapcar (lambda (c)
+				      (car c))
+				    *my-win-conf-list*))))
+      (mapcar (lambda (one)
+		(when (not (string= (car one) name))
+		  one))
+	      *my-win-conf-list*)))))
+
 
 (defun my-window-back ()
   (interactive)

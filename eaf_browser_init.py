@@ -96,6 +96,8 @@ def my_autofill(self):
         res = lst [0] [0]
     else:
         res = get_emacs_func_result ("select-some", [lst])
+    if not res:
+        return
     print ("res=", res, maps [res])
     self.buffer_widget.eval_js(self.pw_autofill_raw.replace("%1", res))
     self.buffer_widget.eval_js('autofillPassword("%s");' % maps [res])
