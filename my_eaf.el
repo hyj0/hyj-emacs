@@ -28,6 +28,7 @@
 (require 'eaf-pdf-viewer)
 (require 'eaf-git)
 (require 'eaf-demo)
+(require 'eaf-org-previewer)
 
 
 (defvar *my-eaf-browser-raw-mode-list* nil)
@@ -64,7 +65,9 @@
 
 (defun my-eaf-fix-key (key-bind)
   (mapcar (lambda (one)
-	    (if (my-eaf-browser-is-raw-mode)
+	    (if (and (my-eaf-browser-is-raw-mode)
+		     (not (or (string= "S-<insert>" (car one))
+			      (string= "M-c" (car one)))))
 		(if (and (> (length (car one)) 1)  (string-match-p "-" (car one)))
 		    (cons (car one) 'eaf-send-key-sequence)
 		  (cons (car one) 'eaf-send-key))
@@ -114,14 +117,21 @@
 (require 'url)
 
 (defun my-rename-buffer (org-fun name &optional un)
-  ;(message "rename buffer %S to %S" (buffer-name) name)
+					;(message "rename buffer %S to %S" (buffer-name) name)
   (when (and (eq major-mode 'eaf-mode) )
     (setq name (concat "eaf-" name))
     (when (string= eaf--buffer-app-name "browser")
-      (setq name (concat name "-" (url-host (url-generic-parse-url (eaf-get-path-or-url))) ":" (format "%d" (url-port (url-generic-parse-url (eaf-get-path-or-url))))))
+      (setq name (concat name
+			 (if (string= "" eaf--buffer-args)
+			     ""
+			   (concat "-" eaf--buffer-args))
+			 "-" (url-host (url-generic-parse-url (eaf-get-path-or-url))) ":"
+			 (format "%d" (url-port (url-generic-parse-url (eaf-get-path-or-url))))
+			 ))
       (when (string-match-p "note.youdao.com" (eaf-get-path-or-url))
 	(my-eaf-exec-pycode "if not self.input_mode:\n\tself.input_mode = True"))
-      (when (string-match-p "10.13.0.174:6901" (eaf-get-path-or-url))
+      (when (or (string-match-p "10.13.0.174:6901" (eaf-get-path-or-url))
+		(string-match-p "10.13.0.174:8081" (eaf-get-path-or-url)))
 	(my-eaf-browser-set-raw-mode)))
     (when (string= eaf--buffer-app-name "pyqterminal")
       (setq name (concat name "-" (eaf-get-path-or-url)))))
@@ -238,19 +248,24 @@ This function works best if paired with a fuzzy search package."
 (eaf-bind-key eaf-send-key "<f8>" eaf-browser-keybinding)
 (eaf-bind-key eaf-send-key "<f7>" eaf-browser-keybinding)
 
+
+(eaf-bind-key my-send-loop-paste-to-eaf "S-<insert>" eaf-browser-keybinding)
+
 (eaf-bind-key eaf-send-key-sequence "C-o" eaf-browser-keybinding)
 (eaf-bind-key eaf-send-key-sequence "C-f" eaf-browser-keybinding)
 
 (eaf-bind-key eaf-py-proxy-yank_text "C-v" eaf-browser-keybinding)
 (eaf-bind-key eaf-send-key-sequence "C-e" eaf-browser-keybinding)
 (eaf-bind-key eaf-py-proxy-copy_text "C-c" eaf-browser-keybinding)
-(eaf-bind-key eaf-send-key-sequence "S-<insert>" eaf-browser-keybinding)
+;(eaf-bind-key eaf-send-key-sequence "S-<insert>" eaf-browser-keybinding)
 
 (eaf-bind-key eaf-send-key-sequence "M-<left>" eaf-browser-keybinding)
 (eaf-bind-key eaf-send-key-sequence "M-<right>" eaf-browser-keybinding)
 
 (eaf-bind-key eaf-send-key-sequence "M-RET" eaf-browser-keybinding)
 (eaf-bind-key eaf-send-key-sequence "C-/" eaf-browser-keybinding)
+(eaf-bind-key my-eaf-send-c-spc "M-c" eaf-browser-keybinding)
+(eaf-bind-key eaf-send-key-sequence "M-<f7>" eaf-browser-keybinding)
 
 ;(eaf-create-send-sequence-function "meta-ret" "M-RET")
 ;(eaf-bind-key eaf-send-meta-ret-sequence "M-RET" eaf-browser-keybinding)
@@ -299,9 +314,19 @@ This function works best if paired with a fuzzy search package."
 (defvar *input-method-key-down* nil)
 (defvar *input-method-string* "")
 
-;input method enter to send row string
+(defvar *my-eaf-key-echo-ctrl-flag* nil)
+
+					;input method enter to send row string
 (defun my-key-echo-key-press-func (key)
-					;(message "press:%s" key)
+					;(message "press:%S" key)
+  (when *my-eaf-key-echo-ctrl-flag*
+    (when (and (not current-input-method) (eq major-mode 'eaf-mode) (string= eaf--buffer-app-name "browser"))
+      (cond
+       ((and (stringp key) (string= "Key.ctrl" key))
+	(my-eaf-exec-pycode "self.my_send_key_press('<Ctrl>')"))
+       ((and (stringp key) (string= "Key.alt" key))
+	(my-eaf-exec-pycode "self.my_send_key_press('<Alt>')")))))
+
   (when (and current-input-method (eq major-mode 'eaf-mode))
 					;(message "press:%S %S" key (type-of key))
     (when (not (eq (current-buffer) *input-method-last-buffer*))
@@ -311,7 +336,7 @@ This function works best if paired with a fuzzy search package."
     (cond
      ((and (stringp key) (string-match-p "Key.enter" key))
       (progn
-	(message "send to eaf:%s" *input-method-string*)
+					;(message "send to eaf:%s" *input-method-string*)
 	(mapc (lambda (c)
 		(eaf-call-sync "send_key" eaf--buffer-id (format "%c" c)))
 	      *input-method-string*)
@@ -337,6 +362,13 @@ This function works best if paired with a fuzzy search package."
 
 (defun my-key-echo-key-release-func (key)
   ;(message "release:%s" key)
+  (when *my-eaf-key-echo-ctrl-flag*
+    (when (and (not current-input-method) (eq major-mode 'eaf-mode)  (string= eaf--buffer-app-name "browser"))
+      (cond
+       ((and (stringp key) (string= "Key.ctrl" key))
+	(my-eaf-exec-pycode "self.my_send_key_release('<Ctrl>')"))
+       ((and (stringp key) (string= "Key.alt" key))
+	(my-eaf-exec-pycode "self.my_send_key_release('<Alt>')")))))
   (when (and current-input-method (eq major-mode 'eaf-mode))
     ;(message "release:%s" key)
     (cond
@@ -347,6 +379,8 @@ This function works best if paired with a fuzzy search package."
      ((and (stringp key) (string-match-p "Key." key))
       (setq *input-method-key-down* nil)))
     ))
+
+
 
 (when nil
   (with-current-buffer (car (fuzzy-find-buffer "note.you"))
@@ -524,13 +558,13 @@ This function works best if paired with a fuzzy search package."
 ;(eaf-open-browser "file:///home/hyj/.emacs.d/hyj-emacs/xe-clipboard-index.html")
 
 (defun my-eaf-open-clipboard-url ()
-  (when (not (fuzzy-find-buffer "eaf-??贴�?��?�?页�??"))
+  (when (not (car (fuzzy-find-buffer "eaf-剪贴板测试页面")))
     (let ((cur-buffer (current-buffer))
 	  (cur-window (get-buffer-window (current-buffer))))
       (eaf-open-browser "file:///home/hyj/.emacs.d/hyj-emacs/xe-clipboard-index.html")
-      (while (not (fuzzy-find-buffer "eaf-??贴�?��?�?页�??"))
+      (while (not (car (fuzzy-find-buffer "eaf-剪贴板测试页面")))
 	(sleep-for 0.2))
-      (with-current-buffer  (car (fuzzy-find-buffer "eaf-??贴�?��?�?页�??"))
+      (with-current-buffer  (car (fuzzy-find-buffer "eaf-剪贴板测试页面"))
 	(switch-to-buffer cur-buffer)))))
 
 
@@ -571,19 +605,21 @@ This function works best if paired with a fuzzy search package."
   (message "Clipboard updated!"))
 
 (defun sync-clipboard-eaf ()
+  ;(message "sync-clipboard-eaf")
   (my-eaf-open-clipboard-url)
-  (with-current-buffer (car (fuzzy-find-buffer "eaf-??贴�?��?�?页�??"))
+  (with-current-buffer (car (fuzzy-find-buffer "eaf-剪贴板测试页面"))
     (my-eaf-exec-pycode "
 f = open (\"/tmp/loop-paste-file.txt\")
-content = f.read ()
+content0 = f.read ()
 f.close ()
-content = repr (content)
-self.set_clipboard_text(content)
+content = repr (content0)
+content = content [0:1] + content [7:]
+self.set_clipboard_text(content0)
 content = f\"document.evaluate('/html/body/div/textarea', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.value = {content}\"
-print (content)
+#print (content)
 print (self.buffer_widget.execute_js (content))
 click = \"document.evaluate('/html/body/div/button[3]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue.click()\"
-print(click)
+#print(click)
 self.buffer_widget.execute_js (click)")))
 
 
@@ -602,18 +638,35 @@ else:
 ")
   (sleep-for 0.2))
 
+(defvar *my-eaf-browser-doing-input* nil)
 (defvar *my-eaf-browser-novnc-list* nil)
 
-(defvar *my-eaf-browser-novnc-input* "")
+; '((zh "中文") (key "<end>") (key "a") )
+(defvar *my-eaf-browser-novnc-input* '())
+
+(defun my-eaf-send-key0 (l)
+  ;(message "send:%S" l)
+  (cond ((eq 'zh (car l))
+	 (progn
+	   (my-eaf-exec-pycode
+	    (format "
+content = '%s'
+content = f\"sendString ('{content}')\"
+self.buffer_widget.execute_js (content)
+" (nth 1 l)))
+	   ;(sleep-for 0.1)
+	   ))
+	((eq 'key (car l))
+	 (eaf-call-sync "send_key" eaf--buffer-id (nth 1 l)))))
 
 (defun my-eaf-send-key ()
   "Directly send key to EAF Python side."
   (interactive)
   (let ((key  (key-description (this-command-keys-vector))))
-					;(message "eaf-send-key %S" key)
+    ;(message "eaf-send-key %S" key)
     (if (and (or  (string-match-p "eaf-noVNC" (buffer-name (current-buffer)))
 		  (string-match-p "KasmVNC" (buffer-name (current-buffer))))
-	     (chinese-string-p key)
+					;(or (chinese-string-p key) (> (length *my-eaf-browser-novnc-input*) 0))
 	     (or
 	      (member eaf--buffer-id *my-eaf-browser-novnc-list*)
 	      (= 1
@@ -629,24 +682,41 @@ set_emacs_var('*my-eaf-pycode-result*', ret)")
 	  (when (not (member eaf--buffer-id *my-eaf-browser-novnc-list*))
 	    (my-eaf-load-novnc-paste-js)
 	    (add-to-list  '*my-eaf-browser-novnc-list*  eaf--buffer-id))
-	  (setq *my-eaf-browser-novnc-input* (concat *my-eaf-browser-novnc-input* key))
+	  (if (chinese-string-p key)
+	      (add-to-list '*my-eaf-browser-novnc-input* (list 'zh key) 't (lambda (a b) nil))
+	    (progn
+	      (if (or  *my-eaf-browser-novnc-input* *my-eaf-browser-doing-input*)
+		  (add-to-list '*my-eaf-browser-novnc-input* (list 'key key) 't (lambda (a b) nil))
+		(progn
+		  (my-eaf-send-key0 (list 'key key))))))
 	  (run-with-idle-timer
 	   0.2
 	   nil
 	   (lambda ()
-	     (when (> (length *my-eaf-browser-novnc-input*) 0)
-	       (message "at %S %s" (current-buffer) *my-eaf-browser-novnc-input*)
+	     (when *my-eaf-browser-novnc-input*
+	       ;(message "at %S %s" (current-buffer) *my-eaf-browser-novnc-input*)
 	       (let ((input *my-eaf-browser-novnc-input*))
-		 (setq *my-eaf-browser-novnc-input* "")
-		 (my-eaf-exec-pycode
-		  (format "
-content = '%s'
-content = f\"sendString ('{content}')\"
-self.buffer_widget.execute_js (content)
-" input))
-					;(sleep-for 0.01)
-		 ))))
-	  (eaf-call-sync "send_key" eaf--buffer-id key))
+		 (setq *my-eaf-browser-doing-input* t)
+		 (setq *my-eaf-browser-novnc-input* '())
+		 (if (= 1 (length input))
+		     (progn
+		       (my-eaf-send-key0 (car input)))
+		   (progn
+		     (my-eaf-send-key0
+		      (cl-reduce (lambda (x y)
+				   ;(message "data:%S %S" x y)
+				   (if (and (eq 'zh (car x)) (eq 'zh (car y)))
+				       (progn
+					 (list 'zh (concat (nth 1 x) (nth 1 y))))
+				     (progn
+				       (my-eaf-send-key0 x)
+				       y))
+				   )
+				 input))
+		     ))
+		 (setq *my-eaf-browser-doing-input* nil)))))
+	  ;(eaf-call-sync "send_key" eaf--buffer-id key)
+	  )
       (eaf-call-sync "send_key" eaf--buffer-id key))))
 
 
@@ -774,6 +844,10 @@ This is intended as a quick fix, e.g., for Google login."
 )
 
 
+;; 设置 EAF 为默认浏览器
+(setq browse-url-browser-function 'eaf-open-browser)
+
+
 (when nil
   (progn
     (add-to-list 'load-path "~/.emacs.d/hyj-emacs/holo-layer")
@@ -784,3 +858,44 @@ This is intended as a quick fix, e.g., for Google login."
 
     )
   )
+
+
+(defun my-send-loop-paste-to-eaf ()
+  (interactive)
+  (let ((is-first t))
+    (mapcar
+     (lambda (s)
+       (if is-first
+	   (setq is-first nil)
+	 (eaf-call-sync "send_key" eaf--buffer-id "<return>"))
+       (if (and
+	    (or (string-match-p "KasmVNC" (buffer-name (current-buffer)))
+		(string-match-p "eaf-noVNC" (buffer-name (current-buffer)))))
+	   (progn
+	     (my-eaf-exec-pycode
+	      (format "
+content = '%s'
+content = f\"sendString ('{content}')\"
+self.buffer_widget.execute_js (content)
+" s)
+	      )
+	     (sleep-for 0.4))
+	 (mapcar (lambda (c)
+		   (eaf-call-sync "send_key" eaf--buffer-id (char-to-string c))
+		   ;(sleep-for 0.01)
+		   )
+		 s)))
+     (string-split
+      (with-current-buffer (car (fuzzy-find-buffer "loop-paste-file.txt"))
+	(buffer-string))
+      "\n"))))
+
+(defun my-eaf-send-c-spc ()
+  (interactive)
+  (eaf-call-sync "send_key_sequence" eaf--buffer-id "C-SPC"))
+
+
+(defun my-windows-open-url ()
+  (interactive)
+  (let ((default-directory "~/"))
+    (shell-command-to-string (format "echo start %s | cmd.exe" eaf--buffer-url ))))

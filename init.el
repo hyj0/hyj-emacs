@@ -23,6 +23,11 @@
 
 (require 'package)
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+
+(setq package-archives '(("gnu" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/gnu/")
+			 ("nongnu" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/nongnu/")
+                         ("melpa" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/melpa/")))
+
 (if (os-is-windows)
     (setq gnutls-algorithm-priority "NORMAL:-VERS-TLS1.1")
   (when nil
@@ -46,7 +51,9 @@
 (add-hook 'after-init-hook
 	  (lambda ()
 	    (require 'evil)
-	    (evil-mode)
+	    (when (not evil-mode)
+	      (evil-mode))
+	    (message "evil mode:%S" evil-mode)
 	    ;(evil-define-key 'visual global-map "." 'my-translate-selected-text)
 	    (evil-global-set-key 'visual "." 'my-translate-selected-text)
 	    (defun my-translate-selected-text ()
@@ -59,6 +66,8 @@
 		(message "没有选中文本！")))
 	    ))
 (add-to-list 'load-path (concat (my-home-dir) "company-mode/"))
+
+
 
 (add-hook 'after-init-hook (lambda ()
 			     (let ((prefix (my-home-dir)))
@@ -76,7 +85,9 @@
 			       (load (concat prefix "my_database.el"))
 			       (load (concat prefix "my_eaf_term.el"))
 			       (load (concat prefix "my_gpt.el"))
-			       )))
+			       (load (concat prefix "my_org.el"))
+			       )
+			    ))
 ;(requirel 'evil)
 ;(evil-mode 1)
 ;(show-paren-mode 1)
@@ -150,19 +161,20 @@
   ;(global-set-key (kbd "C-;") 'sort-tab-close-current-tab)
   )
 
-(require 'popper)
-(popper-mode +1)
+(when nil
+  (require 'popper)
+  (popper-mode +1)
 
-(require 'popper-echo)
-(popper-echo-mode +1)
+  (require 'popper-echo)
+  (popper-echo-mode +1)
 
 
-(setq popper-reference-buffers
-      '("\\*Messages\\*"
-        "Output\\*$"
-        "\\*Async Shell Command\\*"
-        help-mode
-        compilation-mode))
+  (setq popper-reference-buffers
+	'("\\*Messages\\*"
+          "Output\\*$"
+          "\\*Async Shell Command\\*"
+          help-mode
+          compilation-mode)))
 
 
 ;(("name" winconf) ...)

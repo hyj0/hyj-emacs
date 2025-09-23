@@ -132,6 +132,8 @@ self.my_autofill = types.MethodType (my_autofill, self)
 for number in range(1, 36):
     QT_KEY_DICT["<f"+str(number)+">"] = eval("Qt.Key.Key_F{}".format(number))
 QT_KEY_DICT["<shift>"] = Qt.Key.Key_Shift
+QT_KEY_DICT ['<Ctrl>'] = Qt.Key.Key_Control
+QT_KEY_DICT ['<Alt>'] = Qt.Key.Key_Alt
 
 def my_send_key_press(self, event_string):
     from core.buffer import QT_TEXT_DICT

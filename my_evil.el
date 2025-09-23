@@ -34,3 +34,4 @@
 ;(define-key evil-normal-state-map (kbd "g [") 'forward-sexp)
 (define-key evil-normal-state-map (kbd "g [") 'my-forward-sexp)
 ;(define-key evil-normal-state-map (kbd "M-[") 'my-forward-sexp)
+

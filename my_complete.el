@@ -196,14 +196,10 @@
 (ivy-posframe-mode 1)
 
 (require 'recentf)
-(setq recentf-max-saved-items 1000     ; é»?è®?20ï¼?å»ºè??è®¾ç½®100-500
-      recentf-auto-cleanup 'never     ; ?³é?????¨æ???ï¼??¿å??è¿??©å???¤è?°å?ï¼?
-      recentf-save-file "~/.emacs.d/recentf")  ; ??ä¹???å­??¨è·¯å¾?
+(setq recentf-max-saved-items 1000
+      recentf-auto-cleanup 'never
+      recentf-save-file "~/.emacs.d/recentf")
 
-;; é«?çº§è?æ»¤è???ï¼?????ï¼?
-;(setq recentf-exclude '("/ssh:" "/tmp/" ".gz" "COMMIT_EDITMSG")) ; ???¤ç?¹å??è·?å¾?
-
-;; æ¯?15???????¨ä?å­?ï¼?é»?è®?5????ï¼?
 (run-at-time nil (* 3 60) 'recentf-save-list)
 
 (recentf-mode 1)
@@ -218,7 +214,7 @@
 
 (setq company-fuzzy-sorting-function (lambda (lst)
 				       (sort lst #'my-string-len<)))
-;ä¸??¢å½±??äº?elpy
+
 (let ((elpa-dir (expand-file-name "~/.emacs.d/elpa/"))
       (prefix "elpy"))
   (when (file-directory-p elpa-dir)
@@ -230,11 +226,11 @@
 
 
 
-(defun my-ivy-read (prompt history-candidates)
+(defun my-ivy-read (prompt history-candidates &optional preselect)
   (interactive)
   (ivy-read
-   "[EAF/browser] Search || URL || History: "
-   (lambda (str)
+   prompt
+   (lambda (str &rest args)
      (let ((candidates history-candidates)
 	   (start-time (float-time (current-time))))
        (or
@@ -243,12 +239,12 @@
 	(if nil
 	    (append
 	     (seq-filter (lambda (s)
-			   (if (> (- (float-time (current-time)) start-time) 0.6)
+			   (if (> (- (float-time (current-time)) start-time) 1.6)
 			       nil
 			     (string-match-p (regexp-quote str) s)))
 			 candidates)
 	     (sort (seq-filter (lambda (s)
-				 (if  (> (- (float-time (current-time)) start-time) 0.6)
+				 (if  (> (- (float-time (current-time)) start-time) 1.6)
 				     nil
 				   (string-match-p (add-star-between-str2 (regexp-quote str)) s)))
 			       candidates)
@@ -259,7 +255,7 @@
 	       (nth 1 one))
 	     (sort
 	      (cl-remove-if 'null (mapcar (lambda (s)
-					    (if (> (- (float-time (current-time)) start-time) 1.2)
+					    (if (> (- (float-time (current-time)) start-time) 2.2)
 						nil
 					      (let ((ret (my-string-match (add-star-between-str2 str) s)))
 						(if ret
@@ -269,7 +265,8 @@
 	      (lambda (a b)
 		(< (car a) (car b)))))
 	    )))))
-   :dynamic-collection t)
+   :dynamic-collection t
+   :preselect preselect)
   )
 
 
@@ -287,8 +284,11 @@
 					(history-file-exists (file-exists-p browser-history-file-path))
 					(history-candidates (if history-file-exists
 								(mapcar
-								 (lambda (h) (when (string-match history-pattern h)
-									       (format "[%s] ?? %s" (match-string 1 h) (match-string 2 h))))
+								 (lambda (h) (progn
+									       (when (string-match history-pattern h)
+										 (format "[%s] ?? %s" (match-string 1 h) (match-string 2 h)))
+									       (let ((sp (string-split h "á›")))
+										 (format "[%s] %s" (car sp) (car (string-split (car (cdr sp)) "á›¡"))))))
 								 (with-temp-buffer (insert-file-contents browser-history-file-path)
 										   (split-string (buffer-string) "\n" t)))
 							      nil))
@@ -304,6 +304,9 @@
 			    (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 100 ))))
 	(ssh-auinfo-insert (mapcar (lambda (one)
 				     (list (concat (car one) "--insert") (list 'auinfo-insert one)))
+				   (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 100 ))))
+	(ssh-auinfo-aweshell (mapcar (lambda (one)
+				     (list (concat (car one) "--aweshell") (list 'auinfo-aweshell one)))
 				   (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 100 ))))
 	(bookmark-list (mapcar (lambda (one)
 				 (let ((key  (concat (car one) "-->" (my-assoc 'filename one))))
@@ -334,7 +337,7 @@
 				  (list (concat (buffer-name one) "-->buffer") (list 'buffer-name one))
 				  )
 				(buffer-list))))
-    (let ((all-collection (append eaf-url-history my-buffer-list recentf-history ssh-auinfo ssh-auinfo-insert bookmark-list my-functions)))
+    (let ((all-collection (append eaf-url-history my-buffer-list recentf-history ssh-auinfo ssh-auinfo-insert ssh-auinfo-aweshell  bookmark-list my-functions)))
       (let* ((select (my-ivy-read "select:" (mapcar (lambda (one) (car one)) all-collection)))
 	     (value (car (my-assoc select all-collection)))
 	     (key (car value))
@@ -352,12 +355,21 @@
 		 (message "auinfo-str=%S" auinfo-str)
 		 (insert auinfo-str)
 		 ))
+	      ((eq key 'auinfo-aweshell)
+	       (let ((auinfo-str (car value2)))
+		 (message "auinfo-str=%S" auinfo-str)
+		 (let ((default-directory auinfo-str))
+		   (aweshell-new))
+		 ))
 	      ((eq key 'eaf)
 	       (progn
 		 (let* ((history value2)
 			(history-url
-			 (eaf-is-valid-web-url (when (string-match "??\s\\(.+\\)$" history)
-						 (match-string 1 history)))))
+			 (eaf-is-valid-web-url (progn
+						 (when (string-match "??\s\\(.+\\)$" history)
+						   (match-string 1 history))
+						  (let ((sp (string-split history " \?\? ")))
+						    (car (string-split (car (last sp)) "á›¡")))))))
 		   (cond (history-url (eaf-open-browser history-url))
 			 ((eaf-is-valid-web-url history) (eaf-open-browser history))
 			 (t (eaf-search-it history))))))
@@ -697,3 +709,52 @@
      (read-file-name "file:")
      nil
      )))
+
+
+(defun my-open-explorer ()
+  (interactive)
+  (let ((default-directory (read-file-name "dir:")))
+    (shell-command-to-string "explorer.exe ."))
+  )
+
+;fix can not get user name in k8s pod
+(defun my-epe-remote-user (orgin )
+  (let ((ret (funcall orgin)))
+    (if ret
+	ret
+      "")))
+(advice-add 'epe-remote-user :around #'my-epe-remote-user)
+;(advice-remove 'epe-remote-user  #'my-epe-remote-user)
+
+(defun my-tramp-kubernetes-select-namespace ()
+  (interactive)
+  (let ((default-directory "~/"))
+    (setq tramp-kubernetes-namespace
+	  (completing-read
+	   "namespace:"
+	   (mapcar
+	    (lambda (s)
+	      (car (string-split s)))
+	    (string-split
+	     (shell-command-to-string (get-kube-cmd "get namespace"))
+	     "\n"))))))
+
+(defun my-write-log-to-174 ()
+  (interactive)
+  (write-region (point-min) (point-max) "/ssh:hyj@10.13.0.174:~/log.txt"))
+
+
+(defun my-switch-buffer (&optional orgin)
+  (interactive)
+  (switch-to-buffer
+   (my-ivy-read "my switch to buffer:"
+		(mapcar (lambda (one) (car one))
+			(mapcar (lambda (b)
+				  (list (buffer-name b) b))
+				(buffer-list )))
+		(buffer-name (other-buffer (current-buffer))))))
+
+(advice-add 'ivy-switch-buffer :around #'my-switch-buffer)
+(when nil
+  (advice-remove 'ivy-switch-buffer  #'my-switch-buffer)
+  )

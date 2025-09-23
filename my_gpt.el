@@ -10,7 +10,7 @@
 (setq gptel-curl--common-args
       (append gptel-curl--common-args  (list "--proxy"  "http://localhost:8118")))
 
-(defvar *my-llmlite-host* "10.9.0.164:8080")
+(defvar *my-llmlite-host* "10.9.0.164:4000")
 (defvar *my-llmlite-key* "123")
 
 
@@ -24,6 +24,12 @@
 		   :protocol "http"
 		   :endpoint "/chat/completions")))
 
+(my-gptel-make-llmlite-backend "deepseek-genlot"
+  '(deepseek-r1:70b))
+(my-gptel-make-llmlite-backend "gemini" '(gemini-2.0-flash))
+
+(my-gptel-make-llmlite-backend "wenxiaobai-deepseek" '(wenxiaobai-deepseek))
+
 
 (setq
  gptel-backend (gptel-make-openai "openai duckgo"
@@ -34,17 +40,19 @@
 		 :protocol "http"
 		 :endpoint "/chat/completions"))
 
-(setq
- gptel-backend (gptel-make-deepseek "deepseek-genlot"
-		 :models '(deepseek-r1:70b)
-		 :host "10.9.0.164:4000"
-		 :key "no_key"
-		 :stream t
-		 :protocol "http"
-		 :endpoint "/chat/completions"))
-
-
 (setq  gptel-log-level 'debug)
+(setq gptel-default-mode 'org-mode)
+(setq gptel-prompt-prefix-alist
+  '((markdown-mode . "## ")
+    (org-mode . "** ")
+    (text-mode . "### ")))
+(setq gptel-prompt-prefix-alist
+  '((markdown-mode . "## ")
+    (org-mode . "** ")
+    (text-mode . "### ")))
+
+
+
 
 (defun my-gptel ()
   (interactive)

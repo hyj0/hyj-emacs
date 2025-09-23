@@ -87,9 +87,10 @@
     (insert cmd)
     (comint-send-input))
   (switch-to-buffer buffer-name))
+
 (defun command-with-shell-eaf (command &optional buffer-name)
   (let* ((dir (eaf--non-remote-default-directory))
-	(args (make-hash-table :test 'equal))
+	 (args (make-hash-table :test 'equal))
          (expand-dir (expand-file-name dir)))
     (puthash "command" command args)
     (puthash
@@ -101,7 +102,7 @@
     (eaf-open command "pyqterminal" (json-encode-hash-table args) t)))
 
 (defun ssh-eaf (host user passwd &optional proxy port ext-opt)
-  (command-with-shell-eaf (format  "sshpass -p %s ssh  %s@%s  %s  %s -o StrictHostKeyChecking=no  -o ServerAliveInterval=60 -o ServerAliveCountMax=3  %s "
+  (command-with-shell-eaf (format  "sshpass -p \"%s\" ssh  %s@%s  %s  %s -o StrictHostKeyChecking=no  -o ServerAliveInterval=60 -o ServerAliveCountMax=3  %s "
 				   passwd
 				   user
 				   host
@@ -130,7 +131,7 @@
   (let ((pod-name (select-pod pod))
 	(container ""))
     (when (> (length pod-name) 0)
-      (command-with-shell-eaf   (get-kube-cmd (format  "exec -it  %s --container=%s -- sh " pod-name (get-pod-container pod-name)))))))
+      (command-with-shell-eaf (format "bash -c '%s'"  (get-kube-cmd (format  "exec -it  %s --container=%s -- sh " pod-name (get-pod-container pod-name))))))))
 (defun restart-deployment (filter-name)
   (let* ((deploy-name (get-deployment filter-name))
 	(cmd (concat  (get-kube-cmd "rollout restart deployment") deploy-name)))
@@ -151,6 +152,7 @@
 
 (defun kube-apply (file)
   (interactive "fK8S file:")
+  ;get file path name
   (let ((cmd (concat  (get-kube-cmd "apply  --validate=false -f ") file)))
     (message "cmd=%s" cmd)
     (shell-command cmd))
@@ -220,6 +222,9 @@
     res)
   )
 
+(defun kube-get-pod-status2 (name)
+  (shell-command-to-string (get-kube-cmd (concat  "describe pod " (select-pod name))))
+  )
 
 (defun kube-get-pod-status (name)
   (shell-command (get-kube-cmd (concat  "describe pod " (select-pod name))))
@@ -239,7 +244,7 @@
 			 (string-split
 			  (shell-command-to-string (get-kube-cmd "get svc | awk '{print $1}'" name )))))
   (let ((lst (kube-get-doc name)))
-    (eaf-open-browser (nth 1 (nth 0 lst)))))
+    (eaf-open-browser (nth 1 (nth 0 lst)) (format "%s-%s" tramp-kubernetes-namespace  name))))
 
 (defun my-rsync (local-dir host-and-path passwd)
   (let ((cmd (format "rsync -rv -e 'sshpass -p %s ssh -o StrictHostKeyChecking=no -o ProxyCommand=\"nc -X 5 -x 127.0.0.1:1080 %%h %%p\"' %s %s"
@@ -465,3 +470,97 @@
 (defun redis-complet-get (key)
   (eredis-get (completing-read "key:"
 			       (eredis-keys (format "*%s*" key)))))
+
+
+
+(require 'swagg)
+(defun swagg--select-definition (&optional one)
+  "Select a definition interactively.
+Return the parsed swagger object, base API url and the name of
+the definition as it's defined in `swagg-definitions'."
+  (let* ((selected (if one
+		       one
+		     (swagg--completing-read-object
+		      "Select: "
+		      swagg-definitions
+		      :formatter (lambda (it) (plist-get it :name)))))
+         (definition-type (--first (-contains? '(:json :yaml) it) (map-keys selected)))
+         (definition (plist-get selected definition-type))
+         (name (plist-get selected :name))
+         (swagger
+          (with-memoization (alist-get name swagg--json-cache nil nil #'equal)
+            (when (functionp definition)
+              (setq definition (funcall definition selected)))
+            (if (file-exists-p definition)
+                (with-temp-buffer
+                  (insert-file-contents definition)
+                  (swagg--definition-parse-buffer definition-type))
+              (let (result)
+                (request definition
+                  :sync t
+                  :parser (apply-partially #'swagg--definition-parse-buffer definition-type)
+                  :complete (cl-function
+                             (lambda (&key _status data &allow-other-keys)
+                               ;; TODO: Handle status
+                               (setq result data))))
+                result)))))
+    `(,@selected :swagger ,swagger)))
+
+(defun my-swagg-select-definition ()
+  (car
+   (mapcar (lambda (service)
+	     (let ((name (car service))
+		   (base (string-trim-right (cadr service) "/"))
+		   (api-path (caddr service)))
+	       `(:name ,name
+  		       :json ,(concat base api-path)
+  		       :base ,(concat base "/")
+  		       :header-all ((content-type . "application/json")))))
+  	   (delq
+  	    nil
+  	    (mapcar
+  	     (lambda (one)
+  	       (let ((name (car one))
+  		     (url (car (cdr one))))
+  		 (if (string-match-p "nil" url)
+  		     nil
+  		   (progn
+  		     (let ((api-url  (condition-case error
+  					 (my-assoc 'url
+  						   (aref
+  						    (json-read-from-string (fetch-url-content-sync (string-replace "/doc.html" "/swagger-resources" url))) 0))
+  				       (error nil))))
+  		       (if api-url
+  			   (list name (string-replace "/doc.html" "/" url) api-url)
+  			 nil)))
+  		   )))
+  	     (kube-get-doc	(completing-read "service:"
+						 (string-split
+						  (shell-command-to-string (get-kube-cmd "get svc | awk '{print $1}'| grep -v NAME" "" )))))))
+  	   )))
+(defun my-swagg--generate-rest-block ()
+  (interactive)
+  (swagg--generate-rest-block
+   (my-swagg-select-definition)))
+
+(defun my-swagg-request-with-rest-block ()
+  (interactive)
+  (swagg--write-block-to-swagg-buffer
+   (my-swagg--generate-rest-block)
+   nil))
+
+(defun my-swagg-insert-rest-block ()
+  (interactive)
+  (let* ((def (my-swagg-select-definition))
+	 (name (plist-get def :name)))
+    (insert
+     (concat tramp-kubernetes-namespace " " name "\n" swagg-rest-block-prelude (swagg--generate-rest-block (swagg--select-definition def)) swagg-rest-block-postlude "\n"))))
+
+
+
+(defun my-swagg--build-schema-around (origin swagger schema &optional depth)
+  (message "schema:%S" schema)
+  (funcall origin swagger schema depth )
+  )
+(advice-add 'swagg--build-schema :around #'my-swagg--build-schema-around)
+;(advice-remove 'swagg--build-schema #'my-swagg--build-schema-around)
