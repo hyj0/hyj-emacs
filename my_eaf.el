@@ -453,12 +453,28 @@ This function works best if paired with a fuzzy search package."
 (require 'popweb)
 (require 'popweb-dict)
 
+
 (defun eaf-translate-text (text)
   (with-temp-buffer
     (insert text)
     (write-region (point-min) (point-max) "/tmp/eaf-translate.txt" nil 'no-message))
   (let ((res (shell-command-to-string "proxychains trans en:zh -input /tmp/eaf-translate.txt 2>/dev/null ")))
     (with-temp-buffer
+      (insert res)
+      (kill-ring-save (point-min) (point-max))
+      )
+    (tooltip-show (format "%s" res))
+    res))
+
+(defun eaf-translate-text (text)
+  (message "eaf-translate-text:%s" text)
+  (with-temp-buffer
+    (insert text)
+    (write-region (point-min) (point-max) "/tmp/eaf-translate.txt" nil 'no-message))
+  (let ((res (shell-command-to-string "proxychains trans en:zh -input /tmp/eaf-translate.txt 2>/dev/null ")))
+    (with-temp-buffer
+      (insert text)
+      (insert "\n\n")
       (insert res)
       (kill-ring-save (point-min) (point-max))
       )
@@ -502,6 +518,8 @@ This function works best if paired with a fuzzy search package."
       )
     (let ((transed (my-assoc 'translated-text (json-read-from-string res))))
       (with-temp-buffer
+	(insert text)
+	(insert "\n\n")
 	(insert transed)
 	(kill-ring-save (point-min) (point-max))
 	)
@@ -895,7 +913,9 @@ self.buffer_widget.execute_js (content)
   (eaf-call-sync "send_key_sequence" eaf--buffer-id "C-SPC"))
 
 
-(defun my-windows-open-url ()
+(defun my-windows-open-url (&optional url)
   (interactive)
   (let ((default-directory "~/"))
-    (shell-command-to-string (format "echo start %s | cmd.exe" eaf--buffer-url ))))
+    (unless url
+      (setq url eaf--buffer-url))
+    (shell-command-to-string (format "echo start '%s' | cmd.exe" url))))

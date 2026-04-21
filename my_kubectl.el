@@ -71,8 +71,13 @@
     (if (<=  (length pod-name) 0)
 	nil
       (progn
-	(start-process-shell-command cmd cmd cmd)
-	(switch-to-buffer cmd)))
+	(if (string-match-p "^/ssh:" default-directory)
+	    (async-shell-command cmd cmd)
+	  (progn
+	    (start-process-shell-command cmd cmd cmd)
+	    (switch-to-buffer cmd)
+	    ))
+	))
     ))
 (defun command-with-shell (cmd &optional buffer-name)
   (if buffer-name
@@ -102,7 +107,7 @@
     (eaf-open command "pyqterminal" (json-encode-hash-table args) t)))
 
 (defun ssh-eaf (host user passwd &optional proxy port ext-opt)
-  (command-with-shell-eaf (format  "sshpass -p \"%s\" ssh  %s@%s  %s  %s -o StrictHostKeyChecking=no  -o ServerAliveInterval=60 -o ServerAliveCountMax=3  %s "
+  (command-with-shell-eaf (format  "sshpass -p \"%s\" ssh  %s@%s  %s  %s -o StrictHostKeyChecking=no  -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -C  %s "
 				   passwd
 				   user
 				   host
@@ -115,6 +120,23 @@
 				   (if ext-opt
 				       ext-opt
 				     ""))))
+
+(defun ssh-run-command (host user passwd &optional proxy port ext-opt command)
+  (shell-command-to-string
+   (format  "sshpass -p '%s' ssh  %s@%s  %s  %s -o StrictHostKeyChecking=no  -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -C  %s  '%s'"
+	    passwd
+	    user
+	    host
+	    (if port
+		(format "-p %d" port)
+	      "")
+	    (if proxy
+		"-o ProxyCommand='nc -X 5 -x 127.0.0.1:1080 %h %p'"
+	      "")
+	    (if ext-opt
+		ext-opt
+	      "")
+	    command)))
 
 (defun ssh-eaf-authinfo ()
   (interactive)
@@ -134,7 +156,7 @@
       (command-with-shell-eaf (format "bash -c '%s'"  (get-kube-cmd (format  "exec -it  %s --container=%s -- sh " pod-name (get-pod-container pod-name))))))))
 (defun restart-deployment (filter-name)
   (let* ((deploy-name (get-deployment filter-name))
-	(cmd (concat  (get-kube-cmd "rollout restart deployment") deploy-name)))
+	 (cmd (concat  (get-kube-cmd "rollout restart deployment") deploy-name)))
     (message "cmd=%s" cmd)
     (when (> (length deploy-name) 0)
       (shell-command cmd))
@@ -514,7 +536,7 @@ the definition as it's defined in `swagg-definitions'."
 		   (api-path (caddr service)))
 	       `(:name ,name
   		       :json ,(concat base api-path)
-  		       :base ,(concat base "/")
+  		       :base ,(concat base "")
   		       :header-all ((content-type . "application/json")))))
   	   (delq
   	    nil

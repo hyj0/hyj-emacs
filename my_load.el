@@ -80,3 +80,10 @@
 	     (shell-command-to-string (format "wslpath -u '%s'" (current-kill 0))))))
 	 (remote-file (concat "/ssh:projector@10.9.2.141:" "~/Downloads/" (file-name-nondirectory file-to-copy))))
     (copy-file file-to-copy remote-file t)))
+
+
+
+(add-to-list 'load-path "~/.emacs.d/site-lisp/emacs-tramp-rpc/lisp")
+(require 'tramp-rpc)
+
+(setq tramp-rpc-deploy-bootstrap-method "ssh")

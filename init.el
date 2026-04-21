@@ -64,7 +64,9 @@
 		    ;(message "选中的文本是: %s" selected-text)
 		    (eaf-translate-text-long selected-text))  ;; 显示选中的文本
 		(message "没有选中文本！")))
-	    ))
+	    (server-start)
+	    )
+	  )
 (add-to-list 'load-path (concat (my-home-dir) "company-mode/"))
 
 
@@ -72,6 +74,7 @@
 (add-hook 'after-init-hook (lambda ()
 			     (let ((prefix (my-home-dir)))
 			       (global-auto-revert-mode)
+			       (load (concat prefix "my_utils.el"))
 			       (load (concat prefix "my_scheme.el"))
 			       (load (concat prefix "my_evil.el"))
 			       ;(load (concat prefix "auto-save.el"))

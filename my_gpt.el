@@ -165,31 +165,87 @@
 ;(advice-remove  'markdown--browse-url #'my-markdown--browse-url)
 
 
+(defun my-start-chrome-devtools-mcp-proxy ()
+  (interactive)
+  (when (get-process "chrome-devtools-mcp-proxy")
+    (kill-process  (get-process "chrome-devtools-mcp-proxy")))
+  (let ((devtools-ws
+	 (my-assoc 'webSocketDebuggerUrl
+		   (json-read-from-string
+		    (fetch-url-content-sync  "http://localhost:9222/json/version")))))
+    (start-process-shell-command "chrome-devtools-mcp-proxy" "chrome-devtools-mcp-proxy"
+				 (format "python -m mcp_proxy --transport streamablehttp --debug --port=8094 --allow-origin '*' --named-server chrome-devtools-mcp 'npx chrome-devtools-mcp@latest -w %s'" devtools-ws))))
+
+(defun my-start-edge-devtools-mcp-proxy ()
+  (interactive)
+  (when (get-process "chrome-devtools-mcp-proxy")
+    (kill-process  (get-process "chrome-devtools-mcp-proxy")))
+  (let ((devtools-ws
+	 (my-assoc 'webSocketDebuggerUrl
+		   (json-read-from-string
+		    (fetch-url-content-sync  "http://localhost:9223/json/version")))))
+    (start-process-shell-command "chrome-devtools-mcp-proxy" "chrome-devtools-mcp-proxy"
+				 (format "python -m mcp_proxy --transport streamablehttp --debug --port=8094 --allow-origin '*' --named-server chrome-devtools-mcp 'npx chrome-devtools-mcp@latest -w %s'" devtools-ws))))
+
+
+
+(require 'mcp)
+(require 'mcp-hub)
+
+(setq mcp-hub-servers
+      '(
+					;("chrome-devtools" . (:url "http://127.0.0.1:8094/servers/chrome-devtools-mcp/sse"))
+	;("chrome-devtools" . (:command "npx"    :args ("chrome-devtools-mcp@latest" "-w" "ws://localhost:9222/devtools/browser/b581a521-18d1-4850-935b-5b3cb22971e4")))
+	("chrome-devtools" . (:command "python"    :args ("-m" "mcp_proxy" "http://127.0.0.1:8094/servers/chrome-devtools-mcp/sse")))
+	))
+
+(when nil
+  (mcp-hub-start-all-server)
+  (mcp-hub-restart-all-server)
+
+  (let ((connection (gethash "chrome-devtools" mcp-server-connections)))
+    (mcp-call-tool connection "list_pages" '()))
+
+
+  (let ((connection (gethash "chrome-devtools" mcp-server-connections)))
+    (mcp-call-tool connection "select_page" '(:pageIdx 5)))
+
+
+  (let ((connection (gethash "chrome-devtools" mcp-server-connections)))
+    (mcp-call-tool connection "take_snapshot" '()))
+
+  (let ((connection (gethash "chrome-devtools" mcp-server-connections)))
+    (mcp-call-tool connection "fill" '(:uid "5_6" :value "Abc13579")))
+
+  (let ((connection (gethash "chrome-devtools" mcp-server-connections)))
+    (mcp-call-tool connection "click" '(:uid "6_10" )))
+  )
+
 (when nil
   (add-to-list 'gptel-tools
 	       (gptel-make-tool
-		:name "read_buffer"                    ; javascript-style snake_case name
-		:function (lambda (buffer)                  ; the function that will run
+		:name "read_buffer" ; javascript-style snake_case name
+		:function (lambda (buffer) ; the function that will run
 			    (unless (buffer-live-p (get-buffer buffer))
 			      (error "error: buffer %s is not live." buffer))
 			    (with-current-buffer  buffer
 			      (buffer-substring-no-properties (point-min) (point-max))))
 		:description "return the contents of an emacs buffer"
 		:args (list '(:name "buffer"
-				    :type string            ; :type value must be a symbol
+				    :type string ; :type value must be a symbol
 				    :description "the name of the buffer whose contents are to be retrieved"))
 		:category "emacs"))
   (add-to-list 'gptel-tools
 	       (gptel-make-tool
-		:name "create_file"                    ; javascript-style  snake_case name
-		:function (lambda (path filename content)   ; the function that runs
+		:name "create_file" ; javascript-style  snake_case name
+		:function (lambda (path filename content) ; the function that runs
 			    (let ((full-path (expand-file-name filename path)))
 			      (with-temp-buffer
 				(insert content)
 				(write-file full-path))
 			      (format "Created file %s in %s" filename path)))
 		:description "Create a new file with the specified content"
-		:args (list '(:name "path"             ; a list of argument specifications
+		:args (list '(:name "path" ; a list of argument specifications
 				    :type string
 				    :description "The directory where to create the file")
 			    '(:name "filename"

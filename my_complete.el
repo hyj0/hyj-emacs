@@ -226,48 +226,71 @@
 
 
 
+(defun my-match-list (history-candidates str &rest args)
+  ;(message "%S %S" str args)
+  (let ((candidates history-candidates)
+	(start-time (float-time (current-time))))
+    (or
+     (when (< (length str) 1)
+       candidates)
+     (if nil
+	 (append
+	  (seq-filter (lambda (s)
+			(if (> (- (float-time (current-time)) start-time) 1.6)
+			    nil
+			  (string-match-p (regexp-quote str) s)))
+		      candidates)
+	  (sort (seq-filter (lambda (s)
+			      (if  (> (- (float-time (current-time)) start-time) 1.6)
+				  nil
+				(string-match-p (add-star-between-str2 (regexp-quote str)) s)))
+			    candidates)
+		#'my-string-len<))
+       (progn
+	 (mapcar
+	  (lambda (one)
+	    (nth 1 one))
+	  (sort
+	   (cl-remove-if 'null (mapcar (lambda (s)
+					 (if (> (- (float-time (current-time)) start-time) 1.0)
+					     nil
+					   (let ((ret (my-string-match (add-star-between-str2 str) s)))
+					     (if ret
+						 (list (cdr ret) s)
+					       nil))))
+				       history-candidates))
+	   (lambda (a b)
+	     (< (car a) (car b)))))
+	 )))))
+
+
 (defun my-ivy-read (prompt history-candidates &optional preselect)
   (interactive)
-  (ivy-read
-   prompt
-   (lambda (str &rest args)
-     (let ((candidates history-candidates)
-	   (start-time (float-time (current-time))))
-       (or
-	(when (< (length str) 1)
-	  candidates)
-	(if nil
-	    (append
-	     (seq-filter (lambda (s)
-			   (if (> (- (float-time (current-time)) start-time) 1.6)
-			       nil
-			     (string-match-p (regexp-quote str) s)))
-			 candidates)
-	     (sort (seq-filter (lambda (s)
-				 (if  (> (- (float-time (current-time)) start-time) 1.6)
-				     nil
-				   (string-match-p (add-star-between-str2 (regexp-quote str)) s)))
-			       candidates)
-		   #'my-string-len<))
-	  (progn
-	    (mapcar
-	     (lambda (one)
-	       (nth 1 one))
-	     (sort
-	      (cl-remove-if 'null (mapcar (lambda (s)
-					    (if (> (- (float-time (current-time)) start-time) 2.2)
-						nil
-					      (let ((ret (my-string-match (add-star-between-str2 str) s)))
-						(if ret
-						    (list (cdr ret) s)
-						  nil))))
-					  history-candidates))
-	      (lambda (a b)
-		(< (car a) (car b)))))
-	    )))))
-   :dynamic-collection t
-   :preselect preselect)
+  (let ((history-key "")
+	(history-cache nil))
+    (ivy-read
+     prompt
+     (lambda (str &rest args)
+       (let (
+	     (res (my-match-list
+		   (if (and (> (length str) (length history-key))
+			    (string= history-key (substring str 0 (length history-key))))
+		       (progn
+			 ;(message "use cache %d" (length history-cache))
+			 history-cache)
+		     (progn
+		       ;(message "miss cache %d" (length history-candidates))
+		       history-candidates))
+		   str args)))
+	 ;(message "%S %S res:%d" str args (length res))
+	 (setq history-key str)
+	 (setq history-cache res)
+	 res))
+     :dynamic-collection t
+     :preselect preselect))
   )
+
+
 
 
 
@@ -301,13 +324,13 @@
 				 recentf-list))
 	(ssh-auinfo (mapcar (lambda (one)
 			      (list (format "%s --terminal" (car one)) (list 'auinfo one)))
-			    (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 100 ))))
+			    (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 10000 ))))
 	(ssh-auinfo-insert (mapcar (lambda (one)
 				     (list (concat (car one) "--insert") (list 'auinfo-insert one)))
-				   (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 100 ))))
+				   (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 10000 ))))
 	(ssh-auinfo-aweshell (mapcar (lambda (one)
 				     (list (concat (car one) "--aweshell") (list 'auinfo-aweshell one)))
-				   (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 100 ))))
+				   (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 10000 ))))
 	(bookmark-list (mapcar (lambda (one)
 				 (let ((key  (concat (car one) "-->" (my-assoc 'filename one))))
 				   (list key (list 'bookmark one))))
@@ -410,7 +433,8 @@
 
     (plist-put minuet-openai-compatible-options :end-point "http://10.9.0.164:4000/chat/completions")
     (plist-put minuet-openai-compatible-options :api-key "LILTELLM_API_KEY")
-    (plist-put minuet-openai-compatible-options :model "gemini-2.0-flash")
+    ;(plist-put minuet-openai-compatible-options :model "gemini-2.0-flash")
+    (plist-put minuet-openai-compatible-options :model "gemini-2.5-flash")
     ;(plist-put minuet-openai-compatible-options :model "deepseek-r1:70b")
     ;(plist-put minuet-openai-compatible-options :model "deepseek/deepseek-r1/community")
 
@@ -484,13 +508,145 @@
 (global-set-key (kbd "<f2>") 'my-minuet-complete-with-minibuffer)
 
 
+
+
+					;tramp complete in eshell
+(defun my-complete-tramp-authinfo ()
+  (interactive)
+  (let ((sp  (mapcar (lambda (one) (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)))  (auth-source-search :max 100000 ))))
+    (insert  (completing-read "authinfo:" sp))))
+
+(defun my-complete-tramp-authinfo ()
+  (interactive)
+  (let ((eaf-url-history (mapcar (lambda (one)
+				   (list one (list 'eaf one)))
+				 (let* ((browser-history-file-path
+					 (concat eaf-config-location
+						 (file-name-as-directory "browser")
+						 (file-name-as-directory "history")
+						 "log.txt"))
+					(history-pattern "^\\(.+\\)??\\(.+\\)??\\(.+\\)$")
+					(history-file-exists (file-exists-p browser-history-file-path))
+					(history-candidates (if history-file-exists
+								(mapcar
+								 (lambda (h) (progn
+									       (when (string-match history-pattern h)
+										 (format "[%s] ?? %s" (match-string 1 h) (match-string 2 h)))
+									       (let ((sp (string-split h "ᛝ")))
+										 (format "[%s] %s" (car sp) (car (string-split (car (cdr sp)) "ᛡ"))))))
+								 (with-temp-buffer (insert-file-contents browser-history-file-path)
+										   (split-string (buffer-string) "\n" t)))
+							      nil))
+
+					)
+				   history-candidates
+				   )))
+	(recentf-history (mapcar (lambda (one)
+				   (list one (list 'recentf one)))
+				 recentf-list))
+	(ssh-auinfo (mapcar (lambda (one)
+			      (list (format "%s --terminal" (car one)) (list 'auinfo one)))
+			    (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 10000 ))))
+	(ssh-auinfo-insert (mapcar (lambda (one)
+				     (list (concat (car one) "--insert") (list 'auinfo-insert one)))
+				   (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 10000 ))))
+	(ssh-auinfo-aweshell (mapcar (lambda (one)
+				       (list (concat (car one) "--aweshell") (list 'auinfo-aweshell one)))
+				     (mapcar (lambda (one) (list (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)) one))  (auth-source-search :max 10000 ))))
+	(bookmark-list (mapcar (lambda (one)
+				 (let ((key  (concat (car one) "-->" (my-assoc 'filename one))))
+				   (list key (list 'bookmark one))))
+			       (progn
+				 (bookmark-maybe-load-default-file)
+				 (cl-remove-if-not
+				  (lambda (entry)
+				    (bookmark-prop-get entry 'eaf-app))
+				  bookmark-alist)
+				 )))
+	(my-functions (mapcar (lambda (one)
+				(list one (list 'my-functions one)))
+			      (if nil
+				  (all-completions "my-" obarray 'fboundp)
+				(mapcan
+				 (lambda (filename)
+				   (let ((defun-names '()))
+				     (with-temp-buffer
+				       (insert-file-contents filename)
+				       (goto-char (point-min))
+				       (while (re-search-forward "^(defun \\([a-zA-Z0-9_-]+\\)" nil t)
+					 (add-to-list 'defun-names (match-string 1)))
+				       )
+				     defun-names))
+				 (directory-files (my-home-dir) t "^my.*\\.el$")))))
+	(my-buffer-list (mapcar (lambda (one)
+				  (list (concat (buffer-name one) "-->buffer") (list 'buffer-name one))
+				  )
+				(buffer-list))))
+    (let ((all-collection (append  ssh-auinfo ssh-auinfo-insert ssh-auinfo-aweshell)))
+      (let* ((select (my-ivy-read "select:" (mapcar (lambda (one) (car one)) all-collection)))
+	     (value (car (my-assoc select all-collection)))
+	     (key (car value))
+	     (value2 (car (cdr value))))
+	(message "%S-->%S --> %S" select value value2)
+	(cond ((eq key 'auinfo)
+	       (let ((info (car (cdr value2))))
+		 (ssh-eaf (plist-get info :host) (plist-get info :user) (auth-info-password info) t)
+					;info
+		 ))
+	      ((eq key 'buffer-name)
+	       (switch-to-buffer value2))
+	      ((eq key 'auinfo-insert)
+	       (let ((auinfo-str (car value2)))
+		 (message "auinfo-str=%S" auinfo-str)
+		 (insert auinfo-str)
+		 ))
+	      ((eq key 'auinfo-aweshell)
+	       (let ((auinfo-str (car value2)))
+		 (message "auinfo-str=%S" auinfo-str)
+		 (let ((default-directory auinfo-str))
+		   (aweshell-new))
+		 ))
+	      ((eq key 'eaf)
+	       (progn
+		 (let* ((history value2)
+			(history-url
+			 (eaf-is-valid-web-url (progn
+						 (when (string-match "??\s\\(.+\\)$" history)
+						   (match-string 1 history))
+						 (let ((sp (string-split history " \?\? ")))
+						   (car (string-split (car (last sp)) "ᛡ")))))))
+		   (cond (history-url (eaf-open-browser history-url))
+			 ((eaf-is-valid-web-url history) (eaf-open-browser history))
+			 (t (eaf-search-it history))))))
+	      ((eq key 'recentf)
+	       (funcall recentf-menu-action value2)
+	       )
+	      ((eq key 'bookmark)
+	       (let ((select (my-assoc 'filename value2)))
+		 (cond ((eaf-is-valid-web-url select) (eaf-open-browser select))
+		       ((and (file-exists-p select) (file-readable-p select))
+			(find-file select))
+		       (t (message "can not open %s" select)))))
+	      ((eq key 'my-functions)
+	       (message "funcall %s" value2)
+	       (condition-case error
+		   (funcall (intern value2))
+		 (error
+		  (message "cannot funcall %s, try execute-extended-command" value2)
+		  (execute-extended-command nil value2))))
+	      (select
+	       (cond ((eaf-is-valid-web-url select) (eaf-open-browser select))
+		     ((and (file-exists-p select) (file-readable-p select))
+		      (find-file select))
+		     (t (message "can not open %s" select)))))))
+    ))
+
+
 (when t
   (setq tramp-ssh-controlmaster-options "-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o ProxyCommand='nc -X 5 -x 127.0.0.1:1080 %%h %%p'")
-					;tramp complete in eshell
-  (defun my-complete-tramp-authinfo ()
-    (interactive)
-    (let ((sp  (mapcar (lambda (one) (format "/%s:%s@%s:~/" (plist-get one :port) (plist-get one :user) (plist-get one :host)))  (auth-source-search :max 1000 ))))
-      (insert  (completing-read "authinfo:" sp))))
+					;(setq tramp-ssh-controlmaster-options "-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=3 ")
+
+
   (add-hook 'eshell-mode-hook
 	    (lambda ()
 	      (message "eshell-mode-hook!!")
@@ -507,28 +663,6 @@
 	       (current-buffer))
 	      ))
   )
-
-(defun my-eaf-term-in-pwd ()
-  (interactive)
-  (let ((path default-directory))
-    (if (string-match "^/ssh:\\([^@]+\\)@\\([a-zA-Z0-9.]+\\)\\(?:#\\([0-9]+\\)\\)?:\\(.+\\)$" path)
-	(let* ((user (match-string 1 path))
-               (host (match-string 2 path))
-               (port (match-string 3 path))
-               (directory (match-string 4 path))
-	       (info
-		(car
-		 (auth-source-search :user user  :host host :port "ssh" :max 100))))
-	  (if info
-	      (let ((default-directory path))
-		(ssh-eaf (plist-get info :host) (plist-get info :user) (auth-info-password info) t nil
-			 (format "-t 'cd %s && bash'" directory)))
-	    (eaf-open-pyqterminal))
-	  )
-      (eaf-open-pyqterminal))
-    )
-  )
-
 
 (defvar *eaf-term-title* nil)
 
@@ -559,7 +693,7 @@
 
 (defun my-eaf-term-in-pwd0 ()
   (let ((path default-directory))
-    (if (string-match "^/ssh:\\([^@]+\\)@\\([a-zA-Z0-9.]+\\)\\(?:#\\([0-9]+\\)\\)?:\\(.+\\)$" path)
+    (if (string-match "^/ssh:\\([^@]+\\)@\\([a-zA-Z0-9.-]+\\)\\(?:#\\([0-9]+\\)\\)?:\\(.*\\)$" path)
 	(let* ((user (match-string 1 path))
                (host (match-string 2 path))
                (port (match-string 3 path))

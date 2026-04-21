@@ -97,6 +97,7 @@
 
 
 
+
 (when nil
   (my-database-init)
   (setq key (my-database-connect "127.0.0.1" 3309 "root" "123456" "test"))
@@ -104,4 +105,39 @@
   (setq res (my-database-query-sql key "select * from retailer limit 3"))
   (setq res (my-database-query-sql key "select * from retailer_ext limit 1"))
   (cdr (assoc 'retailer_id (aref (cdr (assoc 'rows (cdr (assoc 'data res)))) 0)))
+  )
+
+(add-to-list 'load-path (concat (my-home-dir) "clutch"))
+(require 'clutch)
+
+
+(setq clutch-connect-timeout-seconds 10
+      clutch-read-idle-timeout-seconds 30
+      clutch-query-timeout-seconds 20
+      clutch-jdbc-rpc-timeout-seconds 15)
+
+
+(defun clutch-db--build-limit-offset-paged-sql (base-sql page-num page-size
+                                                         order-by escape-fn)
+  "Build a LIMIT/OFFSET paginated query from BASE-SQL.
+PAGE-NUM is zero-based and PAGE-SIZE is the row count per page.
+ORDER-BY is (COL . DIR) or nil.  ESCAPE-FN escapes the column name."
+  base-sql)
+
+(when nil
+  (require 'mysql)
+  (setq conn
+	(let* ((name   (completing-read "Connection: "
+					(mapcar #'car clutch-connection-alist)
+					nil t))
+	       (params (clutch--saved-connection-params name)))
+	  (clutch-db-connect (plist-get params :backend)  params)
+	  )
+	)
+
+  (let ((result (mysql-query conn "show create table terminal")))
+    (mysql-result-columns result)
+    (mysql-result-rows result))
+
+  (clutch-db-disconnect conn)
   )
